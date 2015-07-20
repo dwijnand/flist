@@ -37,7 +37,7 @@ final class AsyncSeq[A] private (head: Future[A], tail: A => Option[Future[A]])(
       case Some(Failure(_))                => true
     }
 
-  def unpaginate(implicit ec: ExecutionContext): Future[Vector[A]] = {
+  def unpaginate: Future[Vector[A]] = {
     def loop(p: AsyncSeq[A], acc: Vector[A]): Future[Vector[A]] = {
       p.future.flatMap {
         case xs if xs.isEmpty => Future successful acc
