@@ -4,10 +4,6 @@ import scala.annotation.tailrec
 import scala.concurrent.{ ExecutionContext, Future, Promise }
 import scala.util.{ Failure, Success }
 
-// TODO: Create typeclass for these functions & types
-// TODO: Move types in?
-// TODO: Seed, Mapped, FlatMapped, OptMapped? optMap? contraOptMap? OptSeed? VectorSeed?
-// TODO: Move ops to ops class
 object AsyncSeq {
   def apply[A](head: Future[A], next: A => Option[Future[A]])(implicit ec: ExecutionContext) = {
     val asyncSeq = new AsyncSeq[A]
