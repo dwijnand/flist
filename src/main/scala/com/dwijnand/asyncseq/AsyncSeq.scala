@@ -10,24 +10,26 @@ import scala.util.{ Failure, Success }
 // TODO: Move ops to ops class
 object AsyncSeq {
   def apply[A](head: Future[A], gen: A => Option[Future[A]])(implicit ec: ExecutionContext) = {
-    val asyncSeq = new AsyncSeq(gen)
+    val asyncSeq = new AsyncSeq[A]
+
     head.map(Some(_)) onComplete asyncSeq.promise.tryComplete
+
+    asyncSeq.future.onSuccess {
+      case Some(result) =>
+        gen(result) match {
+          case Some(nextResult) => nextResult.map(Some(_)) onComplete asyncSeq.next.promise.tryComplete
+          case None             => asyncSeq.next.promise success None
+        }
+    }
+
     asyncSeq
   }
 }
-final class AsyncSeq[A] private (gen: A => Option[Future[A]])(implicit ec: ExecutionContext) {
-  lazy val next = new AsyncSeq(gen)
+final class AsyncSeq[A] private {
+  lazy val next = new AsyncSeq[A]
 
   private[AsyncSeq] val promise = Promise[Option[A]]()
   val future = promise.future
-
-  future.onSuccess {
-    case Some(result) =>
-      gen(result) match {
-        case Some(nextResult) => nextResult.map(Some(_)) onComplete next.promise.tryComplete
-        case None             => next.promise success None
-      }
-  }
 
   @tailrec def isAllCompleted: Boolean =
     future.value match {
@@ -37,7 +39,7 @@ final class AsyncSeq[A] private (gen: A => Option[Future[A]])(implicit ec: Execu
       case Some(Failure(_))    => true
     }
 
-  def unpaginate: Future[Vector[A]] = {
+  def unpaginate(implicit ec: ExecutionContext): Future[Vector[A]] = {
     def loop(asyncSeq: AsyncSeq[A], acc: Vector[A]): Future[Vector[A]] = {
       asyncSeq.future.flatMap {
         case None    => Future successful acc
@@ -48,6 +50,10 @@ final class AsyncSeq[A] private (gen: A => Option[Future[A]])(implicit ec: Execu
   }
 
   def map[B](f: A => B): AsyncSeq[B] = {
+    ???
+  }
+
+  def flatMap[B](f: A => AsyncSeq[B]): AsyncSeq[B] = {
     ???
   }
 
