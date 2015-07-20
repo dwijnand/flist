@@ -14,7 +14,7 @@ object AsyncSeq {
     asyncSeq
   }
 }
-class AsyncSeq[A] private (head: Future[A], tail: A => Option[Future[A]])(implicit ec: ExecutionContext) {
+final class AsyncSeq[A] private (head: Future[A], tail: A => Option[Future[A]])(implicit ec: ExecutionContext) {
   lazy val next = new AsyncSeq(head, tail)
 
   private[AsyncSeq] val promise = Promise[Option[A]]()
