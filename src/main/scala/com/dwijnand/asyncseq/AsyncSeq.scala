@@ -12,12 +12,12 @@ object AsyncSeq {
   def apply[A](head: Future[A], gen: A => Option[Future[A]])(implicit ec: ExecutionContext) = {
     val asyncSeq = new AsyncSeq[A]
 
-    head.map(Some(_)) onComplete asyncSeq.promise.tryComplete
+    asyncSeq.promise tryCompleteWith head.map(Some(_))
 
     asyncSeq.future.onSuccess {
       case Some(result) =>
         gen(result) match {
-          case Some(nextResult) => nextResult.map(Some(_)) onComplete asyncSeq.next.promise.tryComplete
+          case Some(nextResult) => asyncSeq.next.promise tryCompleteWith nextResult.map(Some(_))
           case None             => asyncSeq.next.promise success None
         }
     }
