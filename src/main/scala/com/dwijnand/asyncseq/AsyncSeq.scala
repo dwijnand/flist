@@ -31,17 +31,17 @@ final class AsyncSeq[A] private (head: Future[A], tail: A => Option[Future[A]])(
 
   @tailrec def isAllCompleted: Boolean =
     future.value match {
-      case None                            => false
-      case Some(Success(xs)) if xs.isEmpty => true
-      case Some(Success(xs))               => next.isAllCompleted
-      case Some(Failure(_))                => true
+      case None                => false
+      case Some(Success(None)) => true
+      case Some(Success(_))    => next.isAllCompleted
+      case Some(Failure(_))    => true
     }
 
   def unpaginate: Future[Vector[A]] = {
-    def loop(p: AsyncSeq[A], acc: Vector[A]): Future[Vector[A]] = {
-      p.future.flatMap {
-        case xs if xs.isEmpty => Future successful acc
-        case ys               => loop(p.next, acc ++ ys)
+    def loop(asyncSeq: AsyncSeq[A], acc: Vector[A]): Future[Vector[A]] = {
+      asyncSeq.future.flatMap {
+        case None    => Future successful acc
+        case Some(x) => loop(asyncSeq.next, acc :+ x)
       }
     }
     loop(this, Vector.empty)
