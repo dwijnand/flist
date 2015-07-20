@@ -9,14 +9,14 @@ import scala.util.{ Failure, Success }
 // TODO: Seed, Mapped, FlatMapped, OptMapped? optMap? contraOptMap? OptSeed? VectorSeed?
 // TODO: Move ops to ops class
 object AsyncSeq {
-  def apply[A](head: Future[A], gen: A => Option[Future[A]])(implicit ec: ExecutionContext) = {
+  def apply[A](head: Future[A], next: A => Option[Future[A]])(implicit ec: ExecutionContext) = {
     val asyncSeq = new AsyncSeq[A]
 
     asyncSeq.promise tryCompleteWith head.map(Some(_))
 
     asyncSeq.future.onSuccess {
       case Some(result) =>
-        gen(result) match {
+        next(result) match {
           case Some(nextResult) => asyncSeq.next.promise tryCompleteWith nextResult.map(Some(_))
           case None             => asyncSeq.next.promise success None
         }
