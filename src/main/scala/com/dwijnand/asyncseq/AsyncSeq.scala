@@ -1,5 +1,6 @@
 package com.dwijnand.asyncseq
 
+import scala.annotation.tailrec
 import scala.concurrent.{ ExecutionContext, Future, Promise }
 import scala.util.{ Failure, Success }
 
@@ -28,7 +29,7 @@ final class AsyncSeq[A] private (head: Future[A], tail: A => Option[Future[A]])(
       }
   }
 
-  def isAllCompleted: Boolean =
+  @tailrec def isAllCompleted: Boolean =
     future.value match {
       case None                            => false
       case Some(Success(xs)) if xs.isEmpty => true
