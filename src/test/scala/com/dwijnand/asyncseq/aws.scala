@@ -1,5 +1,6 @@
 package com.dwijnand.asyncseq
 
+import scala.concurrent.duration._
 import scala.concurrent.{ ExecutionContext, Future }
 
 
@@ -19,8 +20,15 @@ object Main {
   def main(args: Array[String]): Unit = {
     val asgClient = new AsgClient
     val awsClient = new AwsClient(asgClient)
-    TimedFuture {
-      awsClient.getAsgs() flatMap (asgs => awsClient.getLaunchConfigsForAsgs(asgs))
+    import scala.concurrent.ExecutionContext.Implicits.global
+    val (asgsAndLaunchConfigs: Vector[(Asg, LaunchConfig)], timed: Duration) =
+      TimedFuture {
+        awsClient.getAsgs() flatMap (asgs => awsClient.getLaunchConfigsForAsgs(asgs))
+      }.await30s
+    println(s"timed: ${timed.toHHmmssSSS}")
+    println(s"asgs and launch configs:")
+    asgsAndLaunchConfigs foreach { case (asg, launchConfig) =>
+      println(s"asg: $asg  launch config: $launchConfig")
     }
   }
 }
