@@ -18,17 +18,27 @@ final case class LaunchConfigRes(launchConfigs: Vector[LaunchConfig], nextToken:
 
 object Main {
   def main(args: Array[String]): Unit = {
+    import scala.concurrent.ExecutionContext.Implicits.global
+
     val asgClient = new AsgClient
     val awsClient = new AwsClient(asgClient)
-    import scala.concurrent.ExecutionContext.Implicits.global
+
     val (asgsAndLaunchConfigs: Vector[(Asg, LaunchConfig)], timed: Duration) =
       TimedFuture {
         awsClient.getAsgs() flatMap (asgs => awsClient.getLaunchConfigsForAsgs(asgs))
       }.await30s
+
     println(s"timed: ${timed.toHHmmssSSS}")
-    println(s"asgs and launch configs:")
-    asgsAndLaunchConfigs foreach { case (asg, launchConfig) =>
-      println(s"asg: $asg  launch config: $launchConfig")
+
+    val expectedAsgs          = AsgClient.makeAsgs(1 to 450)
+    val expectedLaunchConfigs = AsgClient.makeLaunchConfigs(1 to 450)
+
+    if (asgsAndLaunchConfigs != (expectedAsgs zip expectedLaunchConfigs)) {
+      println(s"Fail")
+      println(s"asgs and launch configs:")
+      asgsAndLaunchConfigs foreach { case (asg, launchConfig) =>
+        println(s"asg: $asg  launch config: $launchConfig")
+      }
     }
   }
 }
@@ -86,6 +96,8 @@ final class AwsClient(asgClient: AsgClient) {
 }
 
 final class AsgClient {
+  import AsgClient._
+
   def describeAsgsAsync(req: AsgReq)(implicit ec: ExecutionContext): Future[AsgRes] =
     Future {
       Thread sleep 10
@@ -128,21 +140,24 @@ final class AsgClient {
         case x                  => sys error s"Unknown input $x"
       }
     }
+}
 
-  private def asgRes(r: Range, nextToken: Option[Int]) =
-    AsgRes(r.toVector.map(n => Asg(f"$n%03d", f"lc$n%03d")), nextToken)
+object AsgClient {
+  def makeAsgs(          r: Range) = r.toVector.map(n => Asg(f"$n%03d", f"lc$n%03d"))
+  def makeLaunchConfigs( r: Range) = r.toVector.map(n => LaunchConfig(f"lc$n%03d"))
 
-  private def launchConfigRes(r: Range, nextToken: Option[Int]) =
-    LaunchConfigRes(r.toVector.map(n => LaunchConfig(f"lc$n%03d")), nextToken)
+  def asgRes(          r: Range, nextToken: Option[Int]) = AsgRes(         makeAsgs(r),          nextToken)
+  def launchConfigRes( r: Range, nextToken: Option[Int]) = LaunchConfigRes(makeLaunchConfigs(r), nextToken)
 
-  private def launchConfigNames(r: Range) = r.toVector.map(n => f"lc$n%03d")
-  private val lcns1 = launchConfigNames(  1 to 50)
-  private val lcns2 = launchConfigNames( 51 to 100)
-  private val lcns3 = launchConfigNames(101 to 150)
-  private val lcns4 = launchConfigNames(151 to 200)
-  private val lcns5 = launchConfigNames(201 to 250)
-  private val lcns6 = launchConfigNames(251 to 300)
-  private val lcns7 = launchConfigNames(301 to 350)
-  private val lcns8 = launchConfigNames(351 to 400)
-  private val lcns9 = launchConfigNames(401 to 450)
+  def launchConfigNames(r: Range) = r.toVector.map(n => f"lc$n%03d")
+
+  val lcns1 = launchConfigNames(  1 to 50)
+  val lcns2 = launchConfigNames( 51 to 100)
+  val lcns3 = launchConfigNames(101 to 150)
+  val lcns4 = launchConfigNames(151 to 200)
+  val lcns5 = launchConfigNames(201 to 250)
+  val lcns6 = launchConfigNames(251 to 300)
+  val lcns7 = launchConfigNames(301 to 350)
+  val lcns8 = launchConfigNames(351 to 400)
+  val lcns9 = launchConfigNames(401 to 450)
 }
