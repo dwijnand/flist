@@ -25,7 +25,7 @@ object Main {
 
     val (asgsAndLaunchConfigs: Vector[(Asg, LaunchConfig)], timed: Duration) =
       TimedFuture {
-        awsClient.getAsgs() flatMap (asgs => awsClient.getLaunchConfigsForAsgs(asgs))
+        awsClient.getAsgs1() flatMap (asgs => awsClient.getLaunchConfigsForAsgs1(asgs))
       }.await30s
 
     println(s"timed: ${timed.toHHmmssSSS}")
@@ -52,7 +52,7 @@ final class AwsClient(asgClient: AsgClient) {
   : Future[LaunchConfigRes] =
     asgClient describeLaunchConfigs req
 
-  def getAsgs(req: AsgReq = AsgReq())(implicit ec: ExecutionContext) = {
+  def getAsgs1(req: AsgReq = AsgReq())(implicit ec: ExecutionContext) = {
     def loop(req: AsgReq, asgs: Vector[Asg]): Future[Vector[Asg]] =
       getAsgsPage(req).flatMap { res =>
         val allAsgs = asgs ++ res.asgs
@@ -64,7 +64,7 @@ final class AwsClient(asgClient: AsgClient) {
     loop(req, Vector.empty)
   }
 
-  def getLaunchConfigs(req: LaunchConfigReq = LaunchConfigReq())(implicit ec: ExecutionContext)
+  def getLaunchConfigs1(req: LaunchConfigReq = LaunchConfigReq())(implicit ec: ExecutionContext)
   : Future[Vector[LaunchConfig]] = {
     def loop(req: LaunchConfigReq, launchConfigs: Vector[LaunchConfig]): Future[Vector[LaunchConfig]] =
       getLaunchConfigsPage(req).flatMap { res =>
@@ -77,11 +77,11 @@ final class AwsClient(asgClient: AsgClient) {
     loop(req, Vector.empty)
   }
 
-  def getLaunchConfigsForAsgs(asgs: Vector[Asg])(implicit ec: ExecutionContext)
+  def getLaunchConfigsForAsgs1(asgs: Vector[Asg])(implicit ec: ExecutionContext)
   : Future[Vector[(Asg, LaunchConfig)]] =
     Future
       .traverse(asgs grouped 50) { asgs =>
-        getLaunchConfigs(LaunchConfigReq(asgs.map(_.launchConfigName)))
+        getLaunchConfigs1(LaunchConfigReq(asgs.map(_.launchConfigName)))
           .map(_.map(launchConfig => launchConfig.name -> launchConfig).toMap)
           .map { launchConfigs =>
             asgs flatMap { asg =>
