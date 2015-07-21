@@ -18,4 +18,7 @@ package object asyncseq {
       f"$hrs%02dh$mins%02dm$secs%02ds$ms%03d"
     }
   }
+  implicit final class FutureWithAwait30s[A](private val fut: Future[A]) extends AnyVal {
+    def await30s = Await.result(fut, 30.seconds)
+  }
 }
