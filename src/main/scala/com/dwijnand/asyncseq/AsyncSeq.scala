@@ -5,27 +5,25 @@ import scala.concurrent.{ ExecutionContext, Future, Promise }
 import scala.util.{ Failure, Success }
 
 object AsyncSeq {
-  def apply[A](head: Future[A], next: A => Option[Future[A]])(implicit ec: ExecutionContext) = {
-    val asyncSeq = new AsyncSeq[A]
-
+  def apply[A](head: Future[A], fetch: A => Option[Future[A]])(implicit ec: ExecutionContext) = {
+    val asyncSeq = new AsyncSeq(fetch)
     asyncSeq.promise tryCompleteWith head.map(Some(_))
-
-    asyncSeq.future.onSuccess {
-      case Some(result) =>
-        next(result) match {
-          case Some(nextResult) => asyncSeq.next.promise tryCompleteWith nextResult.map(Some(_))
-          case None             => asyncSeq.next.promise success None
-        }
-    }
-
     asyncSeq
   }
 }
-final class AsyncSeq[A] private {
-  lazy val next = new AsyncSeq[A]
+final class AsyncSeq[A] private (fetch: A => Option[Future[A]])(implicit ec: ExecutionContext) {
+  lazy val next = new AsyncSeq(fetch)
 
   private[AsyncSeq] val promise = Promise[Option[A]]()
   val future = promise.future
+
+  future.onSuccess {
+    case Some(result) =>
+      fetch(result) match {
+        case Some(nextResult) => next.promise tryCompleteWith nextResult.map(Some(_))
+        case None             => next.promise success None
+      }
+  }
 
   @tailrec def isAllCompleted: Boolean =
     future.value match {
@@ -35,7 +33,7 @@ final class AsyncSeq[A] private {
       case Some(Failure(_))    => true
     }
 
-  def toFuture(implicit ec: ExecutionContext): Future[Vector[A]] = {
+  def toFuture: Future[Vector[A]] = {
     def loop(asyncSeq: AsyncSeq[A], acc: Vector[A]): Future[Vector[A]] = {
       asyncSeq.future.flatMap {
         case None    => Future successful acc
@@ -45,7 +43,7 @@ final class AsyncSeq[A] private {
     loop(this, Vector.empty)
   }
 
-  def map[B](f: A => B)(implicit ec: ExecutionContext): AsyncSeq[B] = {
+  def map[B](f: A => B): AsyncSeq[B] = {
 //    val asyncSeq = new AsyncSeq[B]
 //    asyncSeq.promise tryCompleteWith (future map (_ map f))
 //    asyncSeq.future.onSuccess {
@@ -55,7 +53,7 @@ final class AsyncSeq[A] private {
     ???
   }
 
-  def flatMap[B](f: A => AsyncSeq[B])(implicit ec: ExecutionContext): AsyncSeq[B] = {
+  def flatMap[B](f: A => AsyncSeq[B]): AsyncSeq[B] = {
     ???
   }
 
