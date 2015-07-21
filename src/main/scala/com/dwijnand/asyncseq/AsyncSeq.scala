@@ -72,8 +72,7 @@ object AsyncSeq {
     lazy val next = new Mapped(source.next, f)
 
     future.onSuccess {
-      case None => next.promise success None
-      case _    => next.promise tryCompleteWith source.next.future.map(_ map f)
+      case Some(_) => next.promise tryCompleteWith source.next.future.map(_ map f)
     }
   }
 }
