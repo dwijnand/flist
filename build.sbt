@@ -26,6 +26,7 @@ scalacOptions  += "-Ywarn-unused-import"
 scalacOptions  += "-Ywarn-value-discard"
 
 scalacOptions in (Compile, console) -= "-Ywarn-unused-import"
+scalacOptions in (Test,    console) -= "-Ywarn-unused-import"
 
 // TODO: Switch to enable a bunch & opt-out with comments
 //wartremoverWarnings += Wart.Any                     // bans f-interpolator #158
