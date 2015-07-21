@@ -1,10 +1,11 @@
 package com.dwijnand
 
+import scala.concurrent.{ Await, Future }
 import scala.concurrent.duration._
 import java.util.concurrent.TimeUnit
 
 package object asyncseq {
-  implicit final class DurationW(private val d: Duration) {
+  implicit final class DurationW(private val d: Duration) extends AnyVal {
     def toHHmmssSSS = {
       import TimeUnit._
       val l = d.toMillis

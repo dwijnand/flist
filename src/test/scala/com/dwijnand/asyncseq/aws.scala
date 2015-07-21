@@ -3,20 +3,20 @@ package com.dwijnand.asyncseq
 import scala.concurrent.{ ExecutionContext, Future }
 
 
-case class Asg(name: String, launchConfigName: String)
+final case class Asg(name: String, launchConfigName: String)
 
-case class AsgReq(token: Option[Int] = None)
-case class AsgRes(asgs: Vector[Asg], nextToken: Option[Int])
+final case class AsgReq(token: Option[Int] = None)
+final case class AsgRes(asgs: Vector[Asg], nextToken: Option[Int])
 
 
-case class LaunchConfig(name: String)
+final case class LaunchConfig(name: String)
 
-case class LaunchConfigReq(launchConfigNames: Vector[String] = Vector.empty, token: Option[Int] = None)
-case class LaunchConfigRes(launchConfigs: Vector[LaunchConfig], nextToken: Option[Int])
+final case class LaunchConfigReq(launchConfigNames: Vector[String] = Vector.empty, token: Option[Int] = None)
+final case class LaunchConfigRes(launchConfigs: Vector[LaunchConfig], nextToken: Option[Int])
 
 
 object Main {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val asgClient = new AsgClient
     val awsClient = new AwsClient(asgClient)
     TimedFuture {
@@ -25,7 +25,7 @@ object Main {
   }
 }
 
-class AwsClient(asgClient: AsgClient) {
+final class AwsClient(asgClient: AsgClient) {
   def getAsgsPage(req: AsgReq = AsgReq())(implicit ec: ExecutionContext)
   : Future[AsgRes] =
     asgClient describeAsgsAsync req
@@ -77,7 +77,7 @@ class AwsClient(asgClient: AsgClient) {
       .map(_.flatten.toVector)
 }
 
-class AsgClient {
+final class AsgClient {
   def describeAsgsAsync(req: AsgReq)(implicit ec: ExecutionContext): Future[AsgRes] =
     Future {
       Thread sleep 10
@@ -91,6 +91,7 @@ class AsgClient {
         case Some(7) => asgRes(301 to 350, Some(8))
         case Some(8) => asgRes(351 to 400, Some(9))
         case Some(9) => asgRes(401 to 450, None)
+        case x       => sys error s"Unknown input $x"
       }
     }
 
@@ -116,6 +117,7 @@ class AsgClient {
         case (`lcns8`, Some(2)) => launchConfigRes(376 to 400, None)
         case (`lcns9`, None)    => launchConfigRes(401 to 425, Some(2))
         case (`lcns9`, Some(2)) => launchConfigRes(426 to 450, None)
+        case x                  => sys error s"Unknown input $x"
       }
     }
 
