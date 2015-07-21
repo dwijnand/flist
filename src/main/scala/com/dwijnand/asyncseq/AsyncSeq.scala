@@ -38,24 +38,24 @@ sealed abstract class AsyncSeq[A] private {
   }
 }
 object AsyncSeq {
-  def apply[A](head: Future[A], fetch: A => Option[Future[A]])(implicit ec: ExecutionContext) = {
+  def apply[A](head: Future[A], fetch: A => Option[Future[A]])(implicit ec: ExecutionContext): AsyncSeq[A] = {
     val seed = new Seed(fetch)
     seed.promise tryCompleteWith head.map(Some(_))
     seed
   }
 
-  def mapped[A, B](source: AsyncSeq[A], f: A => B)(implicit ec: ExecutionContext) = {
+  def mapped[A, B](source: AsyncSeq[A], f: A => B)(implicit ec: ExecutionContext): AsyncSeq[B] = {
     val mapped = new Mapped(source, f)
     mapped.promise tryCompleteWith source.future.map(_ map f)
     mapped
   }
 
-  final class Seed[A] private[AsyncSeq] (fetch: A => Option[Future[A]])(implicit ec: ExecutionContext)
+  private final class Seed[A] (fetch: A => Option[Future[A]])(implicit ec: ExecutionContext)
     extends AsyncSeq[A]
   {
     lazy val next = new Seed(fetch)
 
-    private[AsyncSeq] val promise = Promise[Option[A]]()
+    val promise = Promise[Option[A]]()
     val future = promise.future
 
     future.onSuccess {
@@ -66,10 +66,12 @@ object AsyncSeq {
         }
     }
   }
-  final class Mapped[A, B](source: AsyncSeq[A], f: A => B)(implicit ec: ExecutionContext) extends AsyncSeq[B] {
+  private final class Mapped[A, B] (source: AsyncSeq[A], f: A => B)(implicit ec: ExecutionContext)
+    extends AsyncSeq[B]
+  {
     lazy val next = new Mapped(source.next, f)
 
-    private[AsyncSeq] val promise = Promise[Option[B]]()
+    val promise = Promise[Option[B]]()
     val future = promise.future
 
     future.onSuccess {
