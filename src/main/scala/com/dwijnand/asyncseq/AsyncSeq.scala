@@ -45,11 +45,17 @@ final class AsyncSeq[A] private {
     loop(this, Vector.empty)
   }
 
-  def map[B](f: A => B): AsyncSeq[B] = {
+  def map[B](f: A => B)(implicit ec: ExecutionContext): AsyncSeq[B] = {
+//    val asyncSeq = new AsyncSeq[B]
+//    asyncSeq.promise tryCompleteWith (future map (_ map f))
+//    asyncSeq.future.onSuccess {
+//      case Some(result) =>
+//    }
+//    asyncSeq
     ???
   }
 
-  def flatMap[B](f: A => AsyncSeq[B]): AsyncSeq[B] = {
+  def flatMap[B](f: A => AsyncSeq[B])(implicit ec: ExecutionContext): AsyncSeq[B] = {
     ???
   }
 
