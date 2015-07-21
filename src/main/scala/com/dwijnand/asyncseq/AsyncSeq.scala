@@ -34,6 +34,8 @@ sealed abstract class AsyncSeq[A] private {
   final def flatMap[B](f: A => AsyncSeq[B])(implicit ec: ExecutionContext): AsyncSeq[B] =
     ???
 
+  final def flatten[B](implicit ec: ExecutionContext, ev: A <:< AsyncSeq[B]): AsyncSeq[B] = this flatMap ev
+
   final def toStream: Stream[Future[Option[A]]] = {
     lazy val stream: Stream[AsyncSeq[A]] = Stream.cons(this, stream.map(_.next))
     stream.map(_.future)
