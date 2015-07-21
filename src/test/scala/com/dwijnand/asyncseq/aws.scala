@@ -133,7 +133,7 @@ final class AsgClient {
     AsgRes(r.toVector.map(n => Asg(f"$n%03d", f"lc$n%03d")), nextToken)
 
   private def launchConfigRes(r: Range, nextToken: Option[Int]) =
-    LaunchConfigRes(r.toVector.map(n => LaunchConfig(f"$n%03d")), nextToken)
+    LaunchConfigRes(r.toVector.map(n => LaunchConfig(f"lc$n%03d")), nextToken)
 
   private def launchConfigNames(r: Range) = r.toVector.map(n => f"lc$n%03d")
   private val lcns1 = launchConfigNames(  1 to 50)
