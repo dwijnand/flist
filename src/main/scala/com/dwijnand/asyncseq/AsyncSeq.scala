@@ -1,7 +1,7 @@
 package com.dwijnand.asyncseq
 
 import scala.annotation.tailrec
-import scala.concurrent.{ ExecutionContext, Future, Promise }
+import scala.concurrent.{ ExecutionContext => EC, Future, Promise }
 import scala.util.{ Failure, Success }
 
 sealed abstract class AsyncSeq[A] private {
@@ -18,7 +18,7 @@ sealed abstract class AsyncSeq[A] private {
       case Some(Failure(_))    => true
     }
 
-  final def toFuture(implicit ec: ExecutionContext): Future[Vector[A]] = {
+  final def toFuture(implicit ec: EC): Future[Vector[A]] = {
     def loop(asyncSeq: AsyncSeq[A], acc: Vector[A]): Future[Vector[A]] = {
       asyncSeq.future.flatMap {
         case None    => Future successful acc
@@ -28,13 +28,11 @@ sealed abstract class AsyncSeq[A] private {
     loop(this, Vector.empty)
   }
 
-  final def map[B](f: A => B)(implicit ec: ExecutionContext): AsyncSeq[B] =
-    AsyncSeq.mapped(this, f)
+  final def map[B](f: A => B)(implicit ec: EC): AsyncSeq[B] = AsyncSeq.mapped(this, f)
 
-  final def flatMap[B](f: A => AsyncSeq[B])(implicit ec: ExecutionContext): AsyncSeq[B] =
-    ???
+  final def flatMap[B](f: A => AsyncSeq[B])(implicit ec: EC): AsyncSeq[B] = ???
 
-  final def flatten[B](implicit ec: ExecutionContext, ev: A <:< AsyncSeq[B]): AsyncSeq[B] = this flatMap ev
+  final def flatten[B](implicit ec: EC, ev: A <:< AsyncSeq[B]): AsyncSeq[B] = this flatMap ev
 
   final def toStream: Stream[Future[Option[A]]] = {
     lazy val stream: Stream[AsyncSeq[A]] = Stream.cons(this, stream.map(_.next))
@@ -43,21 +41,19 @@ sealed abstract class AsyncSeq[A] private {
 }
 
 object AsyncSeq {
-  def apply[A](head: Future[A], fetch: A => Option[Future[A]])(implicit ec: ExecutionContext): AsyncSeq[A] = {
+  def apply[A](head: Future[A], fetch: A => Option[Future[A]])(implicit ec: EC): AsyncSeq[A] = {
     val seed = new Seed(fetch)
     seed.promise tryCompleteWith head.map(Some(_))
     seed
   }
 
-  def mapped[A, B](source: AsyncSeq[A], f: A => B)(implicit ec: ExecutionContext): AsyncSeq[B] = {
+  def mapped[A, B](source: AsyncSeq[A], f: A => B)(implicit ec: EC): AsyncSeq[B] = {
     val mapped = new Mapped(source, f)
     mapped.promise tryCompleteWith source.future.map(_ map f)
     mapped
   }
 
-  private final class Seed[A](fetch: A => Option[Future[A]])(implicit ec: ExecutionContext)
-    extends AsyncSeq[A]
-  {
+  private final class Seed[A](fetch: A => Option[Future[A]])(implicit ec: EC) extends AsyncSeq[A] {
     lazy val next = new Seed(fetch)
 
     future.onSuccess {
@@ -68,9 +64,7 @@ object AsyncSeq {
         }
     }
   }
-  private final class Mapped[A, B](source: AsyncSeq[A], f: A => B)(implicit ec: ExecutionContext)
-    extends AsyncSeq[B]
-  {
+  private final class Mapped[A, B](source: AsyncSeq[A], f: A => B)(implicit ec: EC) extends AsyncSeq[B] {
     lazy val next = new Mapped(source.next, f)
 
     future.onSuccess {
