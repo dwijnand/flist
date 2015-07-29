@@ -103,8 +103,8 @@ object AsyncSeq {
 
     // Multiset Operations
     def intersect[A1 >: A](ys: AsyncSeq[A1]): AsyncSeq[A] = ???
-    def diff[A1 >: A](ys: AsyncSeq[A1]): AsyncSeq[A] = ???
-    def union[A1 >: A](ys: AsyncSeq[A1]): AsyncSeq[A1] = xs ++ ys
+    def diff     [A1 >: A](ys: AsyncSeq[A1]): AsyncSeq[A] = ???
+    def union    [A1 >: A](ys: AsyncSeq[A1]): AsyncSeq[A1] = xs ++ ys
     def distinct: AsyncSeq[A] = ???
 
     // Comparisons
@@ -125,12 +125,12 @@ object AsyncSeq {
     def tail                         : AsyncSeq[A] = xs.tail
     def init                         : AsyncSeq[A] = ???
     def slice(from: Int, until: Int) : AsyncSeq[A] = ???
-    def take(n: Int)                 : AsyncSeq[A] = ???
     def drop(n: Int)                 : AsyncSeq[A] = ???
-    def takeWhile(p: A => Boolean)   : AsyncSeq[A] = ???
-    def dropWhile(p: A => Boolean)   : AsyncSeq[A] = ???
-    def takeRight(n: Int)            : AsyncSeq[A] = ???
     def dropRight(n: Int)            : AsyncSeq[A] = ???
+    def dropWhile(p: A => Boolean)   : AsyncSeq[A] = ???
+    def take(n: Int)                 : AsyncSeq[A] = ???
+    def takeRight(n: Int)            : AsyncSeq[A] = ???
+    def takeWhile(p: A => Boolean)   : AsyncSeq[A] = ???
     def filter(   p: A => Boolean)   : AsyncSeq[A] = filterImpl(p, isFlipped = false)
     def filterNot(p: A => Boolean)   : AsyncSeq[A] = filterImpl(p, isFlipped = true)
 
