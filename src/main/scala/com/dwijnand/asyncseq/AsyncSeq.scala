@@ -12,12 +12,12 @@ sealed abstract class AsyncSeq[A] private {
 }
 
 object AsyncSeq {
-  implicit final class AsyncSeqOps[A](private val asyncSeq: AsyncSeq[A]) extends AnyVal {
+  implicit final class AsyncSeqOps[A](private val xs: AsyncSeq[A]) extends AnyVal {
     @tailrec def isAllCompleted: Boolean =
-      asyncSeq.head.value match {
+      xs.head.value match {
         case None                => false
         case Some(Success(None)) => true
-        case Some(Success(_))    => asyncSeq.tail.isAllCompleted
+        case Some(Success(_))    => xs.tail.isAllCompleted
         case Some(Failure(_))    => true
       }
 
@@ -28,15 +28,15 @@ object AsyncSeq {
           case Some(x) => loop(asyncSeq.tail, acc :+ x)
         }
       }
-      loop(asyncSeq, Vector.empty)
+      loop(xs, Vector.empty)
     }
 
-    def map[B](f: A => B)(implicit ec: EC)                 : AsyncSeq[B] = AsyncSeq.map(asyncSeq, f)
-    def flatMap[B](f: A => AsyncSeq[B])(implicit ec: EC)   : AsyncSeq[B] = AsyncSeq.flatMap(asyncSeq, f)
-    def flatten[B](implicit ec: EC, ev: A <:< AsyncSeq[B]) : AsyncSeq[B] = AsyncSeq.flatten(asyncSeq)
+    def map[B](f: A => B)(implicit ec: EC)                 : AsyncSeq[B] = AsyncSeq.map(xs, f)
+    def flatMap[B](f: A => AsyncSeq[B])(implicit ec: EC)   : AsyncSeq[B] = AsyncSeq.flatMap(xs, f)
+    def flatten[B](implicit ec: EC, ev: A <:< AsyncSeq[B]) : AsyncSeq[B] = AsyncSeq.flatten(xs)
 
     def toStream: Stream[Future[Option[A]]] = {
-      lazy val stream: Stream[AsyncSeq[A]] = Stream.cons(asyncSeq, stream.map(_.tail))
+      lazy val stream: Stream[AsyncSeq[A]] = Stream.cons(xs, stream.map(_.tail))
       stream.map(_.head)
     }
   }
@@ -47,21 +47,21 @@ object AsyncSeq {
     seed
   }
 
-  def map[A, B](source: AsyncSeq[A], f: A => B)(implicit ec: EC): AsyncSeq[B] = {
-    val mapped = new Mapped(source, f)
-    mapped.promise tryCompleteWith source.head.map(_ map f)
+  def map[A, B](xs: AsyncSeq[A], f: A => B)(implicit ec: EC): AsyncSeq[B] = {
+    val mapped = new Mapped(xs, f)
+    mapped.promise tryCompleteWith xs.head.map(_ map f)
     mapped
   }
 
-  def flatMap[A, B](source: AsyncSeq[A], f: A => AsyncSeq[B])(implicit ec: EC): AsyncSeq[B] = {
-//    val flatMapped = new FlatMapped(source, f)
+  def flatMap[A, B](xs: AsyncSeq[A], f: A => AsyncSeq[B])(implicit ec: EC): AsyncSeq[B] = {
+//    val flatMapped = new FlatMapped(xs, f)
 //    flatMapped.promise
 //    flatMapped
     ???
   }
 
-  def flatten[A, B](source: AsyncSeq[A])(implicit ec: EC, ev: A <:< AsyncSeq[B]): AsyncSeq[B] = {
-    // source flatMap ev
+  def flatten[A, B](xs: AsyncSeq[A])(implicit ec: EC, ev: A <:< AsyncSeq[B]): AsyncSeq[B] = {
+    // xs flatMap ev
     ???
   }
 
@@ -77,17 +77,17 @@ object AsyncSeq {
     }
   }
 
-  private final class Mapped[A, B](source: AsyncSeq[A], f: A => B)(implicit ec: EC) extends AsyncSeq[B] {
-    lazy val tail = new Mapped(source.tail, f)
+  private final class Mapped[A, B](xs: AsyncSeq[A], f: A => B)(implicit ec: EC) extends AsyncSeq[B] {
+    lazy val tail = new Mapped(xs.tail, f)
 
     head.onSuccess {
-      case Some(_) => tail.promise tryCompleteWith source.tail.head.map(_ map f)
+      case Some(_) => tail.promise tryCompleteWith xs.tail.head.map(_ map f)
     }
   }
 
-//  private final class FlatMapped[A, B](source: AsyncSeq[A], f: A => AsyncSeq[B])(implicit ec: EC)
+//  private final class FlatMapped[A, B](xs: AsyncSeq[A], f: A => AsyncSeq[B])(implicit ec: EC)
 //    extends AsyncSeq[B]
 //  {
-//    lazy val next = new FlatMapped(source.next, f)
+//    lazy val tail = new FlatMapped(xs.tail, f)
 //  }
 }
