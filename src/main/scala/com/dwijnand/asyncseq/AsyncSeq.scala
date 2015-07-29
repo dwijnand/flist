@@ -54,6 +54,9 @@ object AsyncSeq {
   }
 
   def flatMapped[A, B](source: AsyncSeq[A], f: A => AsyncSeq[B])(implicit ec: EC): AsyncSeq[B] = {
+//    val flatMapped = new FlatMapped(source, f)
+//    flatMapped.promise
+//    flatMapped
     ???
   }
 
@@ -73,6 +76,7 @@ object AsyncSeq {
         }
     }
   }
+
   private final class Mapped[A, B](source: AsyncSeq[A], f: A => B)(implicit ec: EC) extends AsyncSeq[B] {
     lazy val next = new Mapped(source.next, f)
 
@@ -80,4 +84,10 @@ object AsyncSeq {
       case Some(_) => next.promise tryCompleteWith source.next.future.map(_ map f)
     }
   }
+
+//  private final class FlatMapped[A, B](source: AsyncSeq[A], f: A => AsyncSeq[B])(implicit ec: EC)
+//    extends AsyncSeq[B]
+//  {
+//    lazy val next = new FlatMapped(source.next, f)
+//  }
 }
