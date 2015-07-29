@@ -5,27 +5,27 @@ import scala.concurrent.{ ExecutionContext => EC, Future, Promise }
 import scala.util.{ Failure, Success }
 
 sealed abstract class AsyncSeq[A] private {
-  def next: AsyncSeq[A]
-
   private[AsyncSeq] val promise = Promise[Option[A]]()
-  val future: Future[Option[A]] = promise.future
+
+  val head: Future[Option[A]] = promise.future
+  def tail: AsyncSeq[A]
 }
 
 object AsyncSeq {
   implicit class AsyncSeqOps[A](private val asyncSeq: AsyncSeq[A]) extends AnyVal {
     @tailrec final def isAllCompleted: Boolean =
-      asyncSeq.future.value match {
+      asyncSeq.head.value match {
         case None                => false
         case Some(Success(None)) => true
-        case Some(Success(_))    => asyncSeq.next.isAllCompleted
+        case Some(Success(_))    => asyncSeq.tail.isAllCompleted
         case Some(Failure(_))    => true
       }
 
     final def toFuture(implicit ec: EC): Future[Vector[A]] = {
       def loop(asyncSeq: AsyncSeq[A], acc: Vector[A]): Future[Vector[A]] = {
-        asyncSeq.future.flatMap {
+        asyncSeq.head.flatMap {
           case None    => Future successful acc
-          case Some(x) => loop(asyncSeq.next, acc :+ x)
+          case Some(x) => loop(asyncSeq.tail, acc :+ x)
         }
       }
       loop(asyncSeq, Vector.empty)
@@ -36,8 +36,8 @@ object AsyncSeq {
     final def flatten[B](implicit ec: EC, ev: A <:< AsyncSeq[B]): AsyncSeq[B] = AsyncSeq.flatten(asyncSeq)
 
     final def toStream: Stream[Future[Option[A]]] = {
-      lazy val stream: Stream[AsyncSeq[A]] = Stream.cons(asyncSeq, stream.map(_.next))
-      stream.map(_.future)
+      lazy val stream: Stream[AsyncSeq[A]] = Stream.cons(asyncSeq, stream.map(_.tail))
+      stream.map(_.head)
     }
   }
 
@@ -49,7 +49,7 @@ object AsyncSeq {
 
   def mapped[A, B](source: AsyncSeq[A], f: A => B)(implicit ec: EC): AsyncSeq[B] = {
     val mapped = new Mapped(source, f)
-    mapped.promise tryCompleteWith source.future.map(_ map f)
+    mapped.promise tryCompleteWith source.head.map(_ map f)
     mapped
   }
 
@@ -66,22 +66,22 @@ object AsyncSeq {
   }
 
   private final class Seed[A](fetch: A => Option[Future[A]])(implicit ec: EC) extends AsyncSeq[A] {
-    lazy val next = new Seed(fetch)
+    lazy val tail = new Seed(fetch)
 
-    future.onSuccess {
+    head.onSuccess {
       case Some(result) =>
         fetch(result) match {
-          case Some(nextResult) => next.promise tryCompleteWith nextResult.map(Some(_))
-          case None             => next.promise success None
+          case Some(nextResult) => tail.promise tryCompleteWith nextResult.map(Some(_))
+          case None             => tail.promise success None
         }
     }
   }
 
   private final class Mapped[A, B](source: AsyncSeq[A], f: A => B)(implicit ec: EC) extends AsyncSeq[B] {
-    lazy val next = new Mapped(source.next, f)
+    lazy val tail = new Mapped(source.tail, f)
 
-    future.onSuccess {
-      case Some(_) => next.promise tryCompleteWith source.next.future.map(_ map f)
+    head.onSuccess {
+      case Some(_) => tail.promise tryCompleteWith source.tail.head.map(_ map f)
     }
   }
 
