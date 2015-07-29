@@ -208,10 +208,10 @@ object AsyncSeq {
     def toMap[K, V](implicit ev: A <:< (K, V)): Future[Map[K, V]] = ???
 
     def toVector(implicit ec: EC): Future[Vector[A]] = {
-      def loop(asyncSeq: AsyncSeq[A], acc: Vector[A]): Future[Vector[A]] = {
-        asyncSeq.head.flatMap {
+      def loop(xs: AsyncSeq[A], acc: Vector[A]): Future[Vector[A]] = {
+        xs.head.flatMap {
           case None    => Future successful acc
-          case Some(x) => loop(asyncSeq.tail, acc :+ x)
+          case Some(x) => loop(xs.tail, acc :+ x)
         }
       }
       loop(xs, Vector.empty)
