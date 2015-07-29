@@ -41,6 +41,8 @@ object AsyncSeq {
     }
   }
 
+  def apply[A](as: A*): AsyncSeq[A] = ???
+
   def apply[A](head: Future[A], fetch: A => Option[Future[A]])(implicit ec: EC): AsyncSeq[A] = {
     val seed = new Seed(fetch)
     seed.promise tryCompleteWith head.map(Some(_))
