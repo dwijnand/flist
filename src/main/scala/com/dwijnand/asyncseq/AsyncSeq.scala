@@ -12,8 +12,8 @@ sealed abstract class AsyncSeq[A] private {
 }
 
 object AsyncSeq {
-  implicit class AsyncSeqOps[A](private val asyncSeq: AsyncSeq[A]) extends AnyVal {
-    @tailrec final def isAllCompleted: Boolean =
+  implicit final class AsyncSeqOps[A](private val asyncSeq: AsyncSeq[A]) extends AnyVal {
+    @tailrec def isAllCompleted: Boolean =
       asyncSeq.head.value match {
         case None                => false
         case Some(Success(None)) => true
@@ -21,7 +21,7 @@ object AsyncSeq {
         case Some(Failure(_))    => true
       }
 
-    final def toFuture(implicit ec: EC): Future[Vector[A]] = {
+    def toFuture(implicit ec: EC): Future[Vector[A]] = {
       def loop(asyncSeq: AsyncSeq[A], acc: Vector[A]): Future[Vector[A]] = {
         asyncSeq.head.flatMap {
           case None    => Future successful acc
@@ -31,11 +31,11 @@ object AsyncSeq {
       loop(asyncSeq, Vector.empty)
     }
 
-    final def map[B](f: A => B)(implicit ec: EC)                : AsyncSeq[B] = AsyncSeq.mapped(asyncSeq, f)
-    final def flatMap[B](f: A => AsyncSeq[B])(implicit ec: EC)  : AsyncSeq[B] = AsyncSeq.flatMapped(asyncSeq, f)
-    final def flatten[B](implicit ec: EC, ev: A <:< AsyncSeq[B]): AsyncSeq[B] = AsyncSeq.flatten(asyncSeq)
+    def map[B](f: A => B)(implicit ec: EC)                 : AsyncSeq[B] = AsyncSeq.mapped(asyncSeq, f)
+    def flatMap[B](f: A => AsyncSeq[B])(implicit ec: EC)   : AsyncSeq[B] = AsyncSeq.flatMapped(asyncSeq, f)
+    def flatten[B](implicit ec: EC, ev: A <:< AsyncSeq[B]) : AsyncSeq[B] = AsyncSeq.flatten(asyncSeq)
 
-    final def toStream: Stream[Future[Option[A]]] = {
+    def toStream: Stream[Future[Option[A]]] = {
       lazy val stream: Stream[AsyncSeq[A]] = Stream.cons(asyncSeq, stream.map(_.tail))
       stream.map(_.head)
     }
