@@ -16,6 +16,7 @@ sealed abstract class AsyncSeq[A] private {
 }
 
 object AsyncSeq {
+  // TODO: Consider an Ops that captures the EC at the top
   implicit final class AsyncSeqOps[A](private val xs: AsyncSeq[A]) extends AnyVal {
     @tailrec def isAllCompleted: Boolean =
       xs.head.value match {
@@ -183,6 +184,7 @@ object AsyncSeq {
     def scanRight[B](z: B)(op: (A, B) => B): AsyncSeq[B] = ???
 
     def flatten[B](implicit ec: EC, ev: A <:< AsyncSeq[B]): AsyncSeq[B] = AsyncSeq.flatten(xs)
+ // def flatten[B](implicit ec: EC, ev: A <:< AsyncSeq[B]): AsyncSeq[B] = xs.foldLeft(AsyncSeq[B]())((b, a) => b ++ ev(a))
 
     def remove(p: A => Boolean): AsyncSeq[A] = ???
 
@@ -256,6 +258,8 @@ object AsyncSeq {
     // xs flatMap ev
     ???
   }
+
+  def tbd01[A](f: Future[AsyncSeq[A]]): AsyncSeq[A] = ???
 
   final class Seed[A] private[AsyncSeq] (fetch: A => Option[Future[A]])(implicit ec: EC) extends AsyncSeq[A] {
     lazy val tail = new Seed(fetch)
