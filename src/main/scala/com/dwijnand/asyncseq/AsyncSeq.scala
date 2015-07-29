@@ -138,9 +138,12 @@ object AsyncSeq {
     def groupBy[K](f: A => K)      : Future[Map[K, AsyncSeq[A]]]        = ???
 
     // Element Conditions
-    def forall(p: A => Boolean): Future[Boolean] = ???
-    def exists(p: A => Boolean): Future[Boolean] = ???
-    def count(p: A => Boolean): Future[Int]      = ???
+    def forall(p: A => Boolean)(implicit ec: EC): Future[Boolean] =
+      foldLeft(true)((res, x) => if (p(x)) res else false)
+    def exists(p: A => Boolean)(implicit ec: EC): Future[Boolean] =
+      foldLeft(false)((res, x) => if (p(x)) true else res)
+    def count(p: A => Boolean)(implicit ec: EC): Future[Int] =
+      foldLeft(0)((res, x) => if (p(x)) res + 1 else res)
 
     // Folds
     def foldLeft[B](z: B)(op: (B, A) => B)(implicit ec: EC): Future[B] = {
