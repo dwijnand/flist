@@ -31,8 +31,8 @@ object AsyncSeq {
       loop(asyncSeq, Vector.empty)
     }
 
-    def map[B](f: A => B)(implicit ec: EC)                 : AsyncSeq[B] = AsyncSeq.mapped(asyncSeq, f)
-    def flatMap[B](f: A => AsyncSeq[B])(implicit ec: EC)   : AsyncSeq[B] = AsyncSeq.flatMapped(asyncSeq, f)
+    def map[B](f: A => B)(implicit ec: EC)                 : AsyncSeq[B] = AsyncSeq.map(asyncSeq, f)
+    def flatMap[B](f: A => AsyncSeq[B])(implicit ec: EC)   : AsyncSeq[B] = AsyncSeq.flatMap(asyncSeq, f)
     def flatten[B](implicit ec: EC, ev: A <:< AsyncSeq[B]) : AsyncSeq[B] = AsyncSeq.flatten(asyncSeq)
 
     def toStream: Stream[Future[Option[A]]] = {
@@ -47,13 +47,13 @@ object AsyncSeq {
     seed
   }
 
-  def mapped[A, B](source: AsyncSeq[A], f: A => B)(implicit ec: EC): AsyncSeq[B] = {
+  def map[A, B](source: AsyncSeq[A], f: A => B)(implicit ec: EC): AsyncSeq[B] = {
     val mapped = new Mapped(source, f)
     mapped.promise tryCompleteWith source.head.map(_ map f)
     mapped
   }
 
-  def flatMapped[A, B](source: AsyncSeq[A], f: A => AsyncSeq[B])(implicit ec: EC): AsyncSeq[B] = {
+  def flatMap[A, B](source: AsyncSeq[A], f: A => AsyncSeq[B])(implicit ec: EC): AsyncSeq[B] = {
 //    val flatMapped = new FlatMapped(source, f)
 //    flatMapped.promise
 //    flatMapped
