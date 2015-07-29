@@ -65,7 +65,7 @@ object AsyncSeq {
     ???
   }
 
-  private final class Seed[A](fetch: A => Option[Future[A]])(implicit ec: EC) extends AsyncSeq[A] {
+  final class Seed[A] private[AsyncSeq] (fetch: A => Option[Future[A]])(implicit ec: EC) extends AsyncSeq[A] {
     lazy val tail = new Seed(fetch)
 
     head.onSuccess {
@@ -77,7 +77,7 @@ object AsyncSeq {
     }
   }
 
-  private final class Mapped[A, B](xs: AsyncSeq[A], f: A => B)(implicit ec: EC) extends AsyncSeq[B] {
+  final class Mapped[A, B] private[AsyncSeq] (xs: AsyncSeq[A], f: A => B)(implicit ec: EC) extends AsyncSeq[B] {
     lazy val tail = new Mapped(xs.tail, f)
 
     head.onSuccess {
@@ -85,7 +85,7 @@ object AsyncSeq {
     }
   }
 
-//  private final class FlatMapped[A, B](xs: AsyncSeq[A], f: A => AsyncSeq[B])(implicit ec: EC)
+//  final class FlatMapped[A, B] private[AsyncSeq] (xs: AsyncSeq[A], f: A => AsyncSeq[B])(implicit ec: EC)
 //    extends AsyncSeq[B]
 //  {
 //    lazy val tail = new FlatMapped(xs.tail, f)
