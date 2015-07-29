@@ -143,9 +143,18 @@ object AsyncSeq {
     def count(p: A => Boolean): Future[Int]      = ???
 
     // Folds
-    def foldLeft[B](z: B)(op: (B, A) => B): Future[B] = ???
+    def foldLeft[B](z: B)(op: (B, A) => B)(implicit ec: EC): Future[B] = {
+      def loop(xs: AsyncSeq[A], z: Future[B]): Future[B] = {
+        xs.head.flatMap {
+          case None    => z
+          case Some(x) => loop(xs.tail, z map (op(_, x)))
+        }
+      }
+      loop(xs, Future successful z)
+    }
+
     def foldRight[B](z: B)(op: (A, B) => B): Future[B] = ???
-    def fold[A1 >: A](z: A1)(op: (A1, A1) => A1): Future[A1] = foldLeft(z)(op)
+    def fold[A1 >: A](z: A1)(op: (A1, A1) => A1)(implicit ec: EC): Future[A1] = foldLeft(z)(op)
 
     def reduceLeft[B >: A](op: (B, A) => B): Future[B]                = ???
     def reduceRight[B >: A](op: (A, B) => B): Future[B]               = ???
