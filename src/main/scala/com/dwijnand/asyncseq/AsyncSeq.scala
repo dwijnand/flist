@@ -215,17 +215,7 @@ object AsyncSeq {
     def toSeq[A1 >: A]: Future[Seq[A]] = ???
     def toSet[A1 >: A]: Future[Set[A1]] = ???
     def toMap[K, V](implicit ev: A <:< (K, V)): Future[Map[K, V]] = ???
-
-    def toVector(implicit ec: EC): Future[Vector[A]] = {
-      def loop(xs: AsyncSeq[A], acc: Vector[A]): Future[Vector[A]] = {
-        xs.head.flatMap {
-          case None    => Future successful acc
-          case Some(x) => loop(xs.tail, acc :+ x)
-        }
-      }
-      loop(xs, Vector.empty)
-    }
-
+    def toVector(implicit ec: EC): Future[Vector[A]] = foldLeft(Vector.empty[A])(_ :+ _)
     def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A @uV]]): Col[A @uV] = ???
 
     def toStream: Stream[Future[Option[A]]] = {
