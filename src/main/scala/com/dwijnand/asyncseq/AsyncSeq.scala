@@ -31,11 +31,9 @@ object AsyncSeq {
       loop(asyncSeq, Vector.empty)
     }
 
-    final def map[B](f: A => B)(implicit ec: EC): AsyncSeq[B] = AsyncSeq.mapped(asyncSeq, f)
-
-    final def flatMap[B](f: A => AsyncSeq[B])(implicit ec: EC): AsyncSeq[B] = ???
-
-    final def flatten[B](implicit ec: EC, ev: A <:< AsyncSeq[B]): AsyncSeq[B] = this flatMap ev
+    final def map[B](f: A => B)(implicit ec: EC)                : AsyncSeq[B] = AsyncSeq.mapped(asyncSeq, f)
+    final def flatMap[B](f: A => AsyncSeq[B])(implicit ec: EC)  : AsyncSeq[B] = AsyncSeq.flatMapped(asyncSeq, f)
+    final def flatten[B](implicit ec: EC, ev: A <:< AsyncSeq[B]): AsyncSeq[B] = AsyncSeq.flatten(asyncSeq)
 
     final def toStream: Stream[Future[Option[A]]] = {
       lazy val stream: Stream[AsyncSeq[A]] = Stream.cons(asyncSeq, stream.map(_.next))
@@ -53,6 +51,15 @@ object AsyncSeq {
     val mapped = new Mapped(source, f)
     mapped.promise tryCompleteWith source.future.map(_ map f)
     mapped
+  }
+
+  def flatMapped[A, B](source: AsyncSeq[A], f: A => AsyncSeq[B])(implicit ec: EC): AsyncSeq[B] = {
+    ???
+  }
+
+  def flatten[A, B](source: AsyncSeq[A])(implicit ec: EC, ev: A <:< AsyncSeq[B]): AsyncSeq[B] = {
+    // source flatMap ev
+    ???
   }
 
   private final class Seed[A](fetch: A => Option[Future[A]])(implicit ec: EC) extends AsyncSeq[A] {
