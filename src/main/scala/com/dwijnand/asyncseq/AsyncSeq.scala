@@ -18,36 +18,21 @@ sealed abstract class AsyncSeq[A] private {
 object AsyncSeq {
   // TODO: Consider an Ops that captures the EC at the top
   implicit final class AsyncSeqOps[A](private val xs: AsyncSeq[A]) extends AnyVal {
-    @tailrec def isAllCompleted: Boolean =
-      xs.head.value match {
-        case None                => false
-        case Some(Success(None)) => true
-        case Some(Success(_))    => xs.tail.isAllCompleted
-        case Some(Failure(_))    => true
-      }
-
-    def toFuture(implicit ec: EC): Future[Vector[A]] = {
-      def loop(asyncSeq: AsyncSeq[A], acc: Vector[A]): Future[Vector[A]] = {
-        asyncSeq.head.flatMap {
-          case None    => Future successful acc
-          case Some(x) => loop(asyncSeq.tail, acc :+ x)
-        }
-      }
-      loop(xs, Vector.empty)
-    }
-
     def foreach[U](f: A => U): Future[Unit] = ???
 
     // Size info
-    /** Tests whether this $coll is known to have a finite size.
-      * It returns `'''true'''` if all elements have been computed.
-      * It returns `'''false'''` if the sequence is not yet evaluated to the end.
-      */
-    // TODO: isAllCompleted?
-    def hasDefiniteSize : Boolean         = ???
-    def size            : Future[Int]     = ???
-    def isEmpty         : Future[Boolean] = ???
-    def nonEmpty        : Future[Boolean] = ???
+
+    @tailrec def hasDefiniteSize: Boolean =
+      xs.head.value match {
+        case None                => false
+        case Some(Success(None)) => true
+        case Some(Success(_))    => xs.tail.hasDefiniteSize
+        case Some(Failure(_))    => true
+      }
+
+    def size     : Future[Int]     = ???
+    def isEmpty  : Future[Boolean] = ???
+    def nonEmpty : Future[Boolean] = ???
 
     // Iterators
     def iterator: Future[Iterator[A]] = ???
@@ -221,7 +206,17 @@ object AsyncSeq {
     def toSeq[A1 >: A]: Future[Seq[A]] = ???
     def toSet[A1 >: A]: Future[Set[A1]] = ???
     def toMap[K, V](implicit ev: A <:< (K, V)): Future[Map[K, V]] = ???
-    def toVector: Future[Vector[A]] = ???
+
+    def toVector(implicit ec: EC): Future[Vector[A]] = {
+      def loop(asyncSeq: AsyncSeq[A], acc: Vector[A]): Future[Vector[A]] = {
+        asyncSeq.head.flatMap {
+          case None    => Future successful acc
+          case Some(x) => loop(asyncSeq.tail, acc :+ x)
+        }
+      }
+      loop(xs, Vector.empty)
+    }
+
     def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A @uV]]): Col[A @uV] = ???
 
     def toStream: Stream[Future[Option[A]]] = {
