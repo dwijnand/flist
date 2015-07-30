@@ -18,15 +18,11 @@ sealed abstract class AsyncSeq[A] private {
 object AsyncSeq {
   // TODO: Consider an Ops that captures the EC at the top
   implicit final class AsyncSeqOps[A](private val xs: AsyncSeq[A]) extends AnyVal {
-    def foreach[U](f: A => U)(implicit ec: EC): Future[Unit] = {
-      def loop(xs: AsyncSeq[A]): Future[Unit] = {
-        xs.future flatMap {
-          case None    => Future.successful(())
-          case Some(x) => f(x) ; loop(xs.tail)
-        }
+    def foreach[U](f: A => U)(implicit ec: EC): Future[Unit] =
+      xs.future flatMap {
+        case None    => Future.successful(())
+        case Some(x) => f(x) ; xs.tail foreach f
       }
-      loop(xs)
-    }
 
     // Size info
 
@@ -63,7 +59,11 @@ object AsyncSeq {
     }
 
     def find(p: A => Boolean)(implicit ec: EC): Future[Option[A]] =
-      foldLeft(Option.empty[A])((res, x) => if (p(x)) Some(x) else res)
+      xs.future flatMap {
+        case Some(x) if p(x) => Future successful Some(x)
+        case Some(_)         => xs.tail find p
+        case None            => Future successful None
+      }
 
     // Indexing and Length
     def apply(idx: Int)(implicit ec: EC): Future[A] = {
@@ -72,9 +72,24 @@ object AsyncSeq {
       else drop(idx).future.map(_.getOrElse(throw ex))
     }
 
-    def isDefinedAt(idx: Int): Future[Boolean] = ???
+    def isDefinedAt(idx: Int)(implicit ec: EC): Future[Boolean] =
+      if (idx < 0) Future successful false
+      else lengthCompare(idx) map (_ > 0)
+
     def length(implicit ec: EC): Future[Int] = size
-    def lengthCompare(ys: AsyncSeq[A]): Future[Int] = ???
+
+    def lengthCompare(len: Int)(implicit ec: EC): Future[Int] = {
+      def loop(i: Int, xs: AsyncSeq[A]): Future[Int] =
+        xs.isEmpty flatMap {
+          case true if i == len => Future successful 0
+          case true if i < len  => Future successful -1
+          case true if i > len  => Future successful 1
+          case false            => loop(i + 1, xs.tail)
+        }
+      if (len < 0) Future successful 1
+      else loop(0, xs)
+    }
+
     def indices: AsyncSeq[Int] = ???
 
     // Index Search
@@ -119,7 +134,15 @@ object AsyncSeq {
     def distinct: AsyncSeq[A] = ???
 
     // Comparisons
-    def sameElements[A1 >: A](ys: AsyncSeq[A1])               : Future[Boolean] = ???
+    def sameElements[A1 >: A](ys: AsyncSeq[A1])(implicit ec: EC): Future[Boolean] = {
+      val xy = for { x <- xs.future ; y <- ys.future } yield (x, y)
+      xy flatMap {
+        case (Some(x), Some(y)) if x == y => xs.tail sameElements ys.tail
+        case (None, None)                 => Future successful true
+        case _                            => Future successful false
+      }
+    }
+
     def startsWith[B](ys: AsyncSeq[B])                        : Future[Boolean] = ???
     def startsWith[B](ys: AsyncSeq[B], offset: Int)           : Future[Boolean] = ???
     def endsWith[B](ys: AsyncSeq[B])                          : Future[Boolean] = ???
@@ -165,9 +188,19 @@ object AsyncSeq {
 
     // Element Conditions
     def forall(p: A => Boolean)(implicit ec: EC): Future[Boolean] =
-      foldLeft(true)((res, x) => if (p(x)) res else false)
+      xs.future flatMap {
+        case Some(x) if p(x) => xs.tail forall p
+        case Some(_)         => Future successful false
+        case None            => Future successful true
+      }
+
     def exists(p: A => Boolean)(implicit ec: EC): Future[Boolean] =
-      foldLeft(false)((res, x) => if (p(x)) true else res)
+      xs.future flatMap {
+        case Some(x) if p(x) => Future successful true
+        case Some(_)         => xs.tail exists p
+        case None            => Future successful false
+      }
+
     def count(p: A => Boolean)(implicit ec: EC): Future[Int] =
       foldLeft(0)((res, x) => if (p(x)) res + 1 else res)
 
@@ -175,23 +208,35 @@ object AsyncSeq {
     def foldLeft[B](z: B)(op: (B, A) => B)(implicit ec: EC): Future[B] = {
       def loop(xs: AsyncSeq[A], z: Future[B]): Future[B] = {
         xs.future flatMap {
+          case Some(x) => loop(xs.tail, z.map(b => op(b, x)))
           case None    => z
-          case Some(x) => loop(xs.tail, z map (op(_, x)))
         }
       }
       loop(xs, Future successful z)
     }
 
-    def foldRight[B](z: B)(op: (A, B) => B): Future[B] = ???
+    def foldRight[B](z: B)(op: (A, B) => B)(implicit ec: EC): Future[B] = {
+      xs.future flatMap {
+        case Some(x) => xs.tail.foldRight(z)(op) map (b => op(x, b))
+        case None    => Future successful z
+      }
+    }
+
     def fold[A1 >: A](z: A1)(op: (A1, A1) => A1)(implicit ec: EC): Future[A1] = foldLeft(z)(op)
 
     def reduceLeft[B >: A](op: (B, A) => B)(implicit ec: EC): Future[B] =
       xs.future flatMap {
-        case Some(h) => tail.foldLeft[B](h)(op)
-        case None    => Future.failed(new UnsupportedOperationException("empty.reduceLeft"))
+        case Some(x) => tail.foldLeft[B](x)(op)
+        case None    => Future failed new UnsupportedOperationException("empty.reduceLeft")
       }
 
-    def reduceRight[B >: A](op: (A, B) => B): Future[B]                  = ???
+    def reduceRight[B >: A](op: (A, B) => B)(implicit ec: EC): Future[B] =
+      xs.future flatMap {
+        case None    => Future failed new UnsupportedOperationException("empty.reduceRight")
+        case Some(x) =>
+          tail.isEmpty flatMap (if (_) Future successful x else tail.reduceRight(op) map (b => op(x, b)))
+      }
+
     def reduce[A1 >: A](op: (A1, A1) => A1)(implicit ec: EC): Future[A1] = reduceLeft(op)
     def reduceLeftOption[B >: A](op: (B, A) => B): Future[Option[B]]     = ???
     def reduceRightOption[B >: A](op: (A, B) => B): Future[Option[B]]    = ???
