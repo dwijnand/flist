@@ -38,11 +38,11 @@ object AsyncSeq {
     def iterator: Future[Iterator[A]] = ???
 
     // Element Retrieval
-    def head                  : Future[Option[A]] = xs.head
-    def headForce             : Future[A]         = ???
-    def last                  : Future[Option[A]] = ???
-    def lastForce             : Future[A]         = ???
-    def find(p: A => Boolean) : Future[Option[A]] = ???
+    def head: Future[Option[A]] = xs.head
+    def last: Future[Option[A]] = ???
+
+    def find(p: A => Boolean)(implicit ec: EC): Future[Option[A]] =
+      foldLeft(Option.empty[A])((res, x) => if (p(x)) Some(x) else res)
 
     // Indexing and Length
     def apply(idx: Int): Future[Option[A]] = ???
@@ -52,7 +52,7 @@ object AsyncSeq {
     def indices: AsyncSeq[Int] = ???
 
     // Index Search
-    def indexOf[A1 >: A](x: A1)                            : Future[Int] = ???
+    def indexOf[A1 >: A](x: A1)                            : Future[Int] = indexWhere(_ == x)
     def indexOf[A1 >: A](x: A1, from: Int)                 : Future[Int] = ???
     def lastIndexOf[A1 >: A](x: A1)                        : Future[Int] = ???
     def lastIndexOf[A1 >: A](x: A1, end: Int)              : Future[Int] = ???
@@ -79,7 +79,7 @@ object AsyncSeq {
     // Sorting
     def sorted[A1 >: A](implicit ord: Ordering[A1])     : AsyncSeq[A] = ???
     def sortWith(lt: (A, A) => Boolean)                 : AsyncSeq[A] = ???
-    def sortBy[B](f: A => B)(implicit ord: Ordering[B]) : AsyncSeq[A] = ???
+    def sortBy[B](f: A => B)(implicit ord: Ordering[B]) : AsyncSeq[A] = sorted(ord on f)
 
     // Reversals
     def reverse: AsyncSeq[A] = ???
@@ -97,7 +97,7 @@ object AsyncSeq {
     def startsWith[B](ys: AsyncSeq[B])                        : Future[Boolean] = ???
     def startsWith[B](ys: AsyncSeq[B], offset: Int)           : Future[Boolean] = ???
     def endsWith[B](ys: AsyncSeq[B])                          : Future[Boolean] = ???
-    def contains[A1 >: A](elem: A1)                           : Future[Boolean] = ???
+    def contains[A1 >: A](x: A1)(implicit ec: EC)             : Future[Boolean] = exists(_ == x)
     def containsSlice[B](ys: AsyncSeq[B])                     : Future[Boolean] = ???
     def corresponds[B](ys: AsyncSeq[B])(p: (A, B) => Boolean) : Future[Boolean] = ???
 
@@ -108,7 +108,7 @@ object AsyncSeq {
 
     // Subcollections
     def tail                         : AsyncSeq[A] = xs.tail
-    def init                         : AsyncSeq[A] = ???
+    def init                         : AsyncSeq[A] = dropRight(1)
     def slice(from: Int, until: Int) : AsyncSeq[A] = ???
     def drop(n: Int)                 : AsyncSeq[A] = ???
     def dropRight(n: Int)            : AsyncSeq[A] = ???
@@ -159,12 +159,17 @@ object AsyncSeq {
     def foldRight[B](z: B)(op: (A, B) => B): Future[B] = ???
     def fold[A1 >: A](z: A1)(op: (A1, A1) => A1)(implicit ec: EC): Future[A1] = foldLeft(z)(op)
 
-    def reduceLeft[B >: A](op: (B, A) => B): Future[B]                = ???
-    def reduceRight[B >: A](op: (A, B) => B): Future[B]               = ???
-    def reduce[A1 >: A](op: (A1, A1) => A1): Future[A1]               = reduceLeft(op)
-    def reduceLeftOption[B >: A](op: (B, A) => B): Future[Option[B]]  = ???
-    def reduceRightOption[B >: A](op: (A, B) => B): Future[Option[B]] = ???
-    def reduceOption[A1 >: A](op: (A1, A1) => A1): Future[Option[A1]] = reduceLeftOption(op)
+    def reduceLeft[B >: A](op: (B, A) => B)(implicit ec: EC): Future[B] =
+      head flatMap {
+        case Some(h) => tail.foldLeft[B](h)(op)
+        case None    => Future.failed(new UnsupportedOperationException("empty.reduceLeft"))
+      }
+
+    def reduceRight[B >: A](op: (A, B) => B): Future[B]                  = ???
+    def reduce[A1 >: A](op: (A1, A1) => A1)(implicit ec: EC): Future[A1] = reduceLeft(op)
+    def reduceLeftOption[B >: A](op: (B, A) => B): Future[Option[B]]     = ???
+    def reduceRightOption[B >: A](op: (A, B) => B): Future[Option[B]]    = ???
+    def reduceOption[A1 >: A](op: (A1, A1) => A1): Future[Option[A1]]    = reduceLeftOption(op)
 
     // Specific Folds
     def sum[A1 >: A](implicit num: Numeric[A1])        : Future[A1] = ???
