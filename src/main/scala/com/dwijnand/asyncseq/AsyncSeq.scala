@@ -2,7 +2,7 @@ package com.dwijnand.asyncseq
 
 import scala.annotation.tailrec
 import scala.annotation.unchecked.{ uncheckedVariance => uV }
-import scala.collection.generic.CanBuildFrom
+import scala.collection.generic.{ CanBuildFrom => CBF }
 import scala.collection.immutable.IndexedSeq
 import scala.collection.mutable
 import scala.concurrent.{ ExecutionContext => EC, Future, Promise }
@@ -296,28 +296,27 @@ object AsyncSeq {
     : Future[CC[A1]] =
       foldLeft(b)(_ += _).map(_.result)
 
-    def toArray[A1 >: A: ClassTag](implicit ec: EC) : Future[Array[A1]]          = fromBuilder(Array.newBuilder[A1])
-    def toList(implicit ec: EC)                     : Future[List[A]]            = fromBuilder(List.newBuilder[A])
-    def toStream(implicit ec: EC)                   : Future[Stream[A]]          = fromBuilder(Stream.newBuilder[A])
-    def toBuffer[A1 >: A](implicit ec: EC)          : Future[mutable.Buffer[A1]] = fromBuilder(mutable.Buffer.newBuilder[A1])
-    def toSet[A1 >: A](implicit ec: EC)             : Future[Set[A1]]            = fromBuilder(Set.newBuilder[A1])
-    def toVector(implicit ec: EC)                   : Future[Vector[A]]          = fromBuilder(Vector.newBuilder[A])
+    def to[Col[_]](implicit cbf: CBF[Nothing, A, Col[A @uV]], ec: EC): Future[Col[A @uV]] = fromBuilder(cbf())
 
-    def toMap[K, V](implicit ev: A <:< (K, V), ec: EC) : Future[Map[K, V]]          = foldLeft(Map.newBuilder[K, V])(_ += _).map(_.result)
+    def to2[A1 >: A, Col[_]](implicit cbf: CBF[Nothing, A1, Col[A1 @uV]], ec: EC): Future[Col[A1 @uV]] =
+      fromBuilder(cbf())
 
-    def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A @uV]]) : Future[Col[A @uV]]         = {
-//      val b: mutable.Builder[A, Col[A]] = cbf()
-//      b.sizeHint(this)
-//      b ++= thisCollection
-//      b.result
-      ???
-    }
+    def toArray [A1 >: A: ClassTag](implicit ec: EC): Future[Array[A1]]          = to2[A1, Array]
+    def toBuffer[A1 >: A]          (implicit ec: EC): Future[mutable.Buffer[A1]] = to2[A1, mutable.Buffer]
+    def toSet   [A1 >: A]          (implicit ec: EC): Future[Set[A1]]            = to2[A1, Set]
 
-    def toIterator   (implicit ec: EC) : Future[Iterator[A]]    = toVector.map(_.iterator)
-    def toIndexedSeq (implicit ec: EC) : Future[IndexedSeq[A]]  = toVector
-    def toSeq        (implicit ec: EC) : Future[Seq[A]]         = toIndexedSeq
-    def toIterable   (implicit ec: EC) : Future[Iterable[A]]    = toSeq
-    def toTraversable(implicit ec: EC) : Future[Traversable[A]] = toIterable
+    def toList  (implicit ec: EC): Future[List[A]]   = to[List]
+    def toStream(implicit ec: EC): Future[Stream[A]] = to[Stream]
+    def toVector(implicit ec: EC): Future[Vector[A]] = to[Vector]
+
+    def toMap[K, V](implicit ev: A <:< (K, V), ec: EC): Future[Map[K, V]] =
+      foldLeft(Map.newBuilder[K, V])(_ += _).map(_.result)
+
+    def toIterator   (implicit ec: EC): Future[Iterator[A]]    = toVector.map(_.iterator)
+    def toIndexedSeq (implicit ec: EC): Future[IndexedSeq[A]]  = toVector
+    def toSeq        (implicit ec: EC): Future[Seq[A]]         = toIndexedSeq
+    def toIterable   (implicit ec: EC): Future[Iterable[A]]    = toSeq
+    def toTraversable(implicit ec: EC): Future[Traversable[A]] = toIterable
 
     def toStreamFuture: Stream[Future[Option[A]]] = {
       lazy val stream: Stream[AsyncSeq[A]] = Stream.cons(xs, stream.map(_.tail))
