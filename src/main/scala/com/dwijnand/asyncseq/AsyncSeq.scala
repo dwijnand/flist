@@ -27,6 +27,8 @@ object AsyncSeq {
         case Some(Failure(_))    => true
       }
 
+    def isTraversableAgain: Boolean = true
+
     def isEmpty (implicit ec: EC): Future[Boolean] = xs.head.map(_.isEmpty)
     def nonEmpty(implicit ec: EC): Future[Boolean] = xs.head.map(_.nonEmpty)
     def size    (implicit ec: EC): Future[Int]     = count(_ => true)
@@ -150,7 +152,7 @@ object AsyncSeq {
     def tail                         : AsyncSeq[A] = xs.tail
     def init                         : AsyncSeq[A] = dropRight(1)
     def slice(from: Int, until: Int) : AsyncSeq[A] = ???
-    def drop(n: Int)                 : AsyncSeq[A] = ???
+    def drop(n: Int)(implicit ec: EC): AsyncSeq[A] = ???
     def dropRight(n: Int)            : AsyncSeq[A] = ???
     def dropWhile(p: A => Boolean)   : AsyncSeq[A] = ???
     def take(n: Int)                 : AsyncSeq[A] = ???
@@ -208,7 +210,7 @@ object AsyncSeq {
 
     def foldRight[B](z: B)(op: (A, B) => B)(implicit ec: EC): Future[B] = {
       xs.head flatMap {
-        case Some(x) => xs.tail.foldRight(z)(op) map (b => op(x, b))
+        case Some(x) => xs.tail.foldRight(z)(op).map(b => op(x, b))
         case None    => Future successful z
       }
     }
@@ -232,13 +234,10 @@ object AsyncSeq {
       }
 
     def reduce[A1 >: A](op: (A1, A1) => A1)(implicit ec: EC): Future[Option[A1]] = reduceLeft(op)
-    def reduceLeftOption[B >: A](op: (B, A) => B): Future[Option[B]]     = ???
-    def reduceRightOption[B >: A](op: (A, B) => B): Future[Option[B]]    = ???
-    def reduceOption[A1 >: A](op: (A1, A1) => A1): Future[Option[A1]]    = reduceLeftOption(op)
 
     // Specific Folds
-    def sum[A1 >: A](implicit num: Numeric[A1], ec: EC)     : Future[A1] = foldLeft(num.zero)(num.plus)
-    def product[A1 >: A](implicit num: Numeric[A1], ec: EC) : Future[A1] = foldLeft(num.one)(num.times)
+    def sum    [A1 >: A](implicit num: Numeric[A1], ec: EC): Future[A1] = foldLeft(num.zero)(num.plus)
+    def product[A1 >: A](implicit num: Numeric[A1], ec: EC): Future[A1] = foldLeft(num.one)(num.times)
 
     def min[A1 >: A](implicit ord: Ordering[A1], ec: EC): Future[Option[A]] = {
       xs.head flatMap {
@@ -254,10 +253,29 @@ object AsyncSeq {
       }
     }
 
-    def minBy[B](f: A => B)(implicit cmp: Ordering[B]) : Future[A]  = ???
-    def maxBy[B](f: A => B)(implicit cmp: Ordering[B]) : Future[A]  = ???
+    def minBy[B](f: A => B)(implicit ord: Ordering[B], ec: EC): Future[Option[A]] = {
+      xs.head flatMap {
+        case None    => xs.head
+        case Some(x) =>
+          foldLeft((x, f(x))) { case ((x, fx), y) =>
+            val fy = f(y)
+            if (ord.lt(fx, fy)) (x, fx) else (y, fy)
+          }
+          .map(t => Some(t._1))
+      }
+    }
 
-    def isTraversableAgain: Boolean = true
+    def maxBy[B](f: A => B)(implicit ord: Ordering[B], ec: EC): Future[Option[A]] = {
+      xs.head flatMap {
+        case None    => xs.head
+        case Some(x) =>
+          foldLeft((x, f(x))) { case ((x, fx), y) =>
+            val fy = f(y)
+            if (ord.gt(fx, fy)) (x, fx) else (y, fy)
+          }
+          .map(t => Some(t._1))
+      }
+    }
 
     def scan[B >: A](z: B)(op: (B, B) => B): AsyncSeq[B] = ???
     def scanLeft[B]( z: B)(op: (B, A) => B): AsyncSeq[B] = ???
@@ -269,13 +287,11 @@ object AsyncSeq {
     def remove(p: A => Boolean): AsyncSeq[A] = ???
 
     // Copying
-    def copyToBuffer[B >: A](xs: scala.collection.mutable.Buffer[B]): Unit                       = ???
-    def copyToBuffer[B >: A](xs: scala.collection.mutable.Buffer[B], start: Int): Unit           = ???
-    def copyToBuffer[B >: A](xs: scala.collection.mutable.Buffer[B], start: Int, len: Int): Unit = ???
+    def copyToBuffer[B >: A](xs: mutable.Buffer[B])(implicit ec: EC): Future[Unit] = toVector.map(xs ++= _)
 
-    def copyToArray[B >: A](xs: Array[B]): Unit                       = ???
-    def copyToArray[B >: A](xs: Array[B], start: Int): Unit           = ???
-    def copyToArray[B >: A](xs: Array[B], start: Int, len: Int): Unit = ???
+    def copyToArray[B >: A](xs: Array[B]): Future[Unit]                       = copyToArray(xs, 0, xs.length)
+    def copyToArray[B >: A](xs: Array[B], start: Int): Future[Unit]           = copyToArray(xs, start, xs.length - start)
+    def copyToArray[B >: A](xs: Array[B], start: Int, len: Int): Future[Unit] = ???
 
 
     // Strings
