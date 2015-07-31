@@ -289,10 +289,18 @@ object AsyncSeq {
     // Copying
     def copyToBuffer[B >: A](xs: mutable.Buffer[B])(implicit ec: EC): Future[Unit] = toVector.map(xs ++= _)
 
-    def copyToArray[B >: A](xs: Array[B]): Future[Unit]                       = copyToArray(xs, 0, xs.length)
-    def copyToArray[B >: A](xs: Array[B], start: Int): Future[Unit]           = copyToArray(xs, start, xs.length - start)
-    def copyToArray[B >: A](xs: Array[B], start: Int, len: Int): Future[Unit] = ???
-
+    def copyToArray[B >: A](arr: Array[B])                      (implicit ec: EC): Future[Unit] = copyToArray(arr, 0, arr.length)
+    def copyToArray[B >: A](arr: Array[B], start: Int)          (implicit ec: EC): Future[Unit] = copyToArray(arr, start, arr.length - start)
+    def copyToArray[B >: A](arr: Array[B], start: Int, len: Int)(implicit ec: EC): Future[Unit] = {
+      val end = (start + len) min arr.length
+      def loop(xs: AsyncSeq[A], i: Int): Future[Unit] = {
+        xs.head flatMap {
+          case Some(x) if i < end => arr(i) = x ; loop(xs.tail, i + 1)
+          case _                  => Future.successful(())
+        }
+      }
+      loop(xs, start)
+    }
 
     // Strings
     def mkString(start: String, sep: String, end: String): Future[String] = ???
