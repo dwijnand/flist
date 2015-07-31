@@ -9,7 +9,7 @@ import scala.util.{ Failure, Success }
 import scala.{ PartialFunction => ?=> }
 
 sealed trait AsyncSeq[+A] extends Any {
-  def future: Future[Option[A]]
+  def head: Future[Option[A]]
   def tail: AsyncSeq[A]
 }
 
@@ -17,7 +17,7 @@ object AsyncSeq {
   // TODO: Consider an Ops that captures the EC at the top
   implicit final class AsyncSeqOps[A](private val xs: AsyncSeq[A]) extends AnyVal {
     def foreach[U](f: A => U)(implicit ec: EC): Future[Unit] =
-      xs.future flatMap {
+      xs.head flatMap {
         case None    => Future.successful(())
         case Some(x) => f(x) ; xs.tail foreach f
       }
@@ -25,7 +25,7 @@ object AsyncSeq {
     // Size info
 
     @tailrec def hasDefiniteSize: Boolean =
-      xs.future.value match {
+      xs.head.value match {
         case None                => false
         case Some(Success(None)) => true
         case Some(Success(_))    => xs.tail.hasDefiniteSize
@@ -33,31 +33,23 @@ object AsyncSeq {
       }
 
     def size(implicit ec: EC)     : Future[Int]     = count(_ => true)
-    def isEmpty(implicit ec: EC)  : Future[Boolean] = xs.future.map(_.isEmpty)
-    def nonEmpty(implicit ec: EC) : Future[Boolean] = xs.future.map(_.nonEmpty)
+    def isEmpty(implicit ec: EC)  : Future[Boolean] = xs.head.map(_.isEmpty)
+    def nonEmpty(implicit ec: EC) : Future[Boolean] = xs.head.map(_.nonEmpty)
 
     // Iterators
     def iterator: Future[Iterator[A]] = ???
 
     // Element Retrieval
-    def head(implicit ec: EC): Future[A] =
-      xs.future.map(_.getOrElse(throw new NoSuchElementException("empty.head")))
+    def head: Future[Option[A]] = xs.head
 
-    def last(implicit ec: EC): Future[A] = {
-      def loop(x: A, xs: AsyncSeq[A]): Future[A] = {
-        xs.future flatMap {
-          case None    => Future successful x
-          case Some(x) => loop(x, xs.tail)
-        }
+    def last(implicit ec: EC): Future[Option[A]] =
+      xs.head flatMap {
+        case None    => xs.head
+        case Some(x) => xs.tail.last
       }
-      xs.future flatMap {
-        case None    => Future failed new NoSuchElementException("empty.last")
-        case Some(x) => loop(x, xs.tail)
-      }
-    }
 
     def find(p: A => Boolean)(implicit ec: EC): Future[Option[A]] =
-      xs.future flatMap {
+      xs.head flatMap {
         case Some(x) if p(x) => Future successful Some(x)
         case Some(_)         => xs.tail find p
         case None            => Future successful None
@@ -67,7 +59,7 @@ object AsyncSeq {
     def apply(idx: Int)(implicit ec: EC): Future[A] = {
       def ex = new scala.IndexOutOfBoundsException("" + idx)
       if (idx < 0) Future failed ex
-      else drop(idx).future.map(_.getOrElse(throw ex))
+      else drop(idx).head.map(_.getOrElse(throw ex))
     }
 
     def isDefinedAt(idx: Int)(implicit ec: EC): Future[Boolean] =
@@ -133,7 +125,7 @@ object AsyncSeq {
 
     // Comparisons
     def sameElements[A1 >: A](ys: AsyncSeq[A1])(implicit ec: EC): Future[Boolean] = {
-      val xy = for { x <- xs.future ; y <- ys.future } yield (x, y)
+      val xy = for { x <- xs.head ; y <- ys.head } yield (x, y)
       xy flatMap {
         case (Some(x), Some(y)) if x == y => xs.tail sameElements ys.tail
         case (None, None)                 => Future successful true
@@ -186,14 +178,14 @@ object AsyncSeq {
 
     // Element Conditions
     def forall(p: A => Boolean)(implicit ec: EC): Future[Boolean] =
-      xs.future flatMap {
+      xs.head flatMap {
         case Some(x) if p(x) => xs.tail forall p
         case Some(_)         => Future successful false
         case None            => Future successful true
       }
 
     def exists(p: A => Boolean)(implicit ec: EC): Future[Boolean] =
-      xs.future flatMap {
+      xs.head flatMap {
         case Some(x) if p(x) => Future successful true
         case Some(_)         => xs.tail exists p
         case None            => Future successful false
@@ -205,7 +197,7 @@ object AsyncSeq {
     // Folds
     def foldLeft[B](z: B)(op: (B, A) => B)(implicit ec: EC): Future[B] = {
       def loop(xs: AsyncSeq[A], z: Future[B]): Future[B] = {
-        xs.future flatMap {
+        xs.head flatMap {
           case Some(x) => loop(xs.tail, z.map(b => op(b, x)))
           case None    => z
         }
@@ -214,7 +206,7 @@ object AsyncSeq {
     }
 
     def foldRight[B](z: B)(op: (A, B) => B)(implicit ec: EC): Future[B] = {
-      xs.future flatMap {
+      xs.head flatMap {
         case Some(x) => xs.tail.foldRight(z)(op) map (b => op(x, b))
         case None    => Future successful z
       }
@@ -223,13 +215,13 @@ object AsyncSeq {
     def fold[A1 >: A](z: A1)(op: (A1, A1) => A1)(implicit ec: EC): Future[A1] = foldLeft(z)(op)
 
     def reduceLeft[B >: A](op: (B, A) => B)(implicit ec: EC): Future[B] =
-      xs.future flatMap {
+      xs.head flatMap {
         case Some(x) => tail.foldLeft[B](x)(op)
         case None    => Future failed new UnsupportedOperationException("empty.reduceLeft")
       }
 
     def reduceRight[B >: A](op: (A, B) => B)(implicit ec: EC): Future[B] =
-      xs.future flatMap {
+      xs.head flatMap {
         case None    => Future failed new UnsupportedOperationException("empty.reduceRight")
         case Some(x) =>
           tail.isEmpty flatMap (if (_) Future successful x else tail.reduceRight(op) map (b => op(x, b)))
@@ -297,7 +289,7 @@ object AsyncSeq {
 
     def toStream: Stream[Future[Option[A]]] = {
       lazy val stream: Stream[AsyncSeq[A]] = Stream.cons(xs, stream.map(_.tail))
-      stream.map(_.future)
+      stream.map(_.head)
     }
   }
 
@@ -314,7 +306,7 @@ object AsyncSeq {
 
   def map[A, B](xs: AsyncSeq[A], f: A => B)(implicit ec: EC): AsyncSeq[B] = {
     val mapped = new Mapped(xs, f)
-    mapped.promise tryCompleteWith xs.future.map(_ map f)
+    mapped.promise tryCompleteWith xs.head.map(_ map f)
     mapped
   }
 
@@ -335,11 +327,11 @@ object AsyncSeq {
   final class Seed[A] private[AsyncSeq] (fetch: A => Option[Future[A]])(implicit ec: EC) extends AsyncSeq[A] {
     private[AsyncSeq] val promise = Promise[Option[A]]()
 
-    val future: Future[Option[A]] = promise.future
+    val head: Future[Option[A]] = promise.future
 
     lazy val tail = new Seed(fetch)
 
-    future.onSuccess {
+    head.onSuccess {
       case Some(result) =>
         fetch(result) match {
           case Some(nextResult) => tail.promise tryCompleteWith nextResult.map(Some(_))
@@ -351,12 +343,12 @@ object AsyncSeq {
   final class Mapped[A, B] private[AsyncSeq] (xs: AsyncSeq[A], f: A => B)(implicit ec: EC) extends AsyncSeq[B] {
     private[AsyncSeq] val promise = Promise[Option[B]]()
 
-    val future: Future[Option[B]] = promise.future
+    val head: Future[Option[B]] = promise.future
 
     lazy val tail = new Mapped(xs.tail, f)
 
-    future.onSuccess {
-      case Some(_) => tail.promise tryCompleteWith xs.tail.future.map(_ map f)
+    head.onSuccess {
+      case Some(_) => tail.promise tryCompleteWith xs.tail.head.map(_ map f)
     }
   }
 
