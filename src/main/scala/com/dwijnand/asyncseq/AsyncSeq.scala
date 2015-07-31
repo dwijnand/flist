@@ -200,13 +200,10 @@ object AsyncSeq {
 
     // Folds
     def foldLeft[B](z: B)(op: (B, A) => B)(implicit ec: EC): Future[B] = {
-      def loop(xs: AsyncSeq[A], z: Future[B]): Future[B] = {
-        xs.head flatMap {
-          case Some(x) => loop(xs.tail, z.map(b => op(b, x)))
-          case None    => z
-        }
+      xs.head flatMap {
+        case Some(x) => xs.tail.foldLeft(op(z, x))(op)
+        case None    => Future successful z
       }
-      loop(xs, Future successful z)
     }
 
     def foldRight[B](z: B)(op: (A, B) => B)(implicit ec: EC): Future[B] = {
