@@ -293,6 +293,13 @@ object AsyncSeq {
     }
   }
 
+  def empty[A]: AsyncSeq[A] = Empty
+
+  object Empty extends AsyncSeq[Nothing] {
+    def head = Future successful None
+    def tail   = Empty
+  }
+
   def apply[A](as: A*): AsyncSeq[A] = {
     if (as.isEmpty) ???
     else ???
