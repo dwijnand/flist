@@ -8,10 +8,8 @@ import scala.reflect.ClassTag
 import scala.util.{ Failure, Success }
 import scala.{ PartialFunction => ?=> }
 
-sealed abstract class AsyncSeq[A] private {
-  private[AsyncSeq] val promise = Promise[Option[A]]()
-
-  val future: Future[Option[A]] = promise.future
+sealed trait AsyncSeq[A] extends Any {
+  def future: Future[Option[A]]
   def tail: AsyncSeq[A]
 }
 
@@ -335,6 +333,10 @@ object AsyncSeq {
   def tbd01[A](f: Future[AsyncSeq[A]]): AsyncSeq[A] = ???
 
   final class Seed[A] private[AsyncSeq] (fetch: A => Option[Future[A]])(implicit ec: EC) extends AsyncSeq[A] {
+    private[AsyncSeq] val promise = Promise[Option[A]]()
+
+    val future: Future[Option[A]] = promise.future
+
     lazy val tail = new Seed(fetch)
 
     future.onSuccess {
@@ -347,6 +349,10 @@ object AsyncSeq {
   }
 
   final class Mapped[A, B] private[AsyncSeq] (xs: AsyncSeq[A], f: A => B)(implicit ec: EC) extends AsyncSeq[B] {
+    private[AsyncSeq] val promise = Promise[Option[B]]()
+
+    val future: Future[Option[B]] = promise.future
+
     lazy val tail = new Mapped(xs.tail, f)
 
     future.onSuccess {
@@ -357,6 +363,10 @@ object AsyncSeq {
 //  final class FlatMapped[A, B] private[AsyncSeq] (xs: AsyncSeq[A], f: A => AsyncSeq[B])(implicit ec: EC)
 //    extends AsyncSeq[B]
 //  {
+//    private[AsyncSeq] val promise = Promise[Option[B]]()
+//
+//    val future: Future[Option[B]] = promise.future
+//
 //    lazy val tail = new FlatMapped(xs.tail, f)
 //  }
 }
