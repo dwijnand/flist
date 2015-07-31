@@ -8,7 +8,7 @@ import scala.reflect.ClassTag
 import scala.util.{ Failure, Success }
 import scala.{ PartialFunction => ?=> }
 
-sealed trait AsyncSeq[A] extends Any {
+sealed trait AsyncSeq[+A] extends Any {
   def future: Future[Option[A]]
   def tail: AsyncSeq[A]
 }
