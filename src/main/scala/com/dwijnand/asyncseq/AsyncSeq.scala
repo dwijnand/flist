@@ -3,6 +3,8 @@ package com.dwijnand.asyncseq
 import scala.annotation.tailrec
 import scala.annotation.unchecked.{ uncheckedVariance => uV }
 import scala.collection.generic.CanBuildFrom
+import scala.collection.immutable.IndexedSeq
+import scala.collection.mutable
 import scala.concurrent.{ ExecutionContext => EC, Future, Promise }
 import scala.reflect.ClassTag
 import scala.util.{ Failure, Success }
@@ -56,6 +58,7 @@ object AsyncSeq {
       }
 
     // Indexing and Length
+    // TODO: Future[Option[A]] ?
     def apply(idx: Int)(implicit ec: EC): Future[A] = {
       def ex = new scala.IndexOutOfBoundsException("" + idx)
       if (idx < 0) Future failed ex
@@ -214,29 +217,45 @@ object AsyncSeq {
 
     def fold[A1 >: A](z: A1)(op: (A1, A1) => A1)(implicit ec: EC): Future[A1] = foldLeft(z)(op)
 
-    def reduceLeft[B >: A](op: (B, A) => B)(implicit ec: EC): Future[B] =
+    def reduceLeft[B >: A](op: (B, A) => B)(implicit ec: EC): Future[Option[B]] =
       xs.head flatMap {
-        case Some(x) => tail.foldLeft[B](x)(op)
-        case None    => Future failed new UnsupportedOperationException("empty.reduceLeft")
+        case None    => xs.head
+        case Some(x) => tail.foldLeft[B](x)(op).map(Some(_))
       }
 
-    def reduceRight[B >: A](op: (A, B) => B)(implicit ec: EC): Future[B] =
+    def reduceRight[B >: A](op: (A, B) => B)(implicit ec: EC): Future[Option[B]] =
       xs.head flatMap {
-        case None    => Future failed new UnsupportedOperationException("empty.reduceRight")
+        case None    => xs.head
         case Some(x) =>
-          tail.isEmpty flatMap (if (_) Future successful x else tail.reduceRight(op) map (b => op(x, b)))
+          tail.isEmpty.flatMap { isEmpty =>
+            // TOOD: unsure
+            if (isEmpty) xs.head else tail.reduceRight(op).map(b => b.map(b => op(x, b)))
+          }
       }
 
-    def reduce[A1 >: A](op: (A1, A1) => A1)(implicit ec: EC): Future[A1] = reduceLeft(op)
+    def reduce[A1 >: A](op: (A1, A1) => A1)(implicit ec: EC): Future[Option[A1]] = reduceLeft(op)
     def reduceLeftOption[B >: A](op: (B, A) => B): Future[Option[B]]     = ???
     def reduceRightOption[B >: A](op: (A, B) => B): Future[Option[B]]    = ???
     def reduceOption[A1 >: A](op: (A1, A1) => A1): Future[Option[A1]]    = reduceLeftOption(op)
 
     // Specific Folds
-    def sum[A1 >: A](implicit num: Numeric[A1])        : Future[A1] = ???
-    def product[A1 >: A](implicit num: Numeric[A1])    : Future[A1] = ???
-    def min[A1 >: A](implicit ord: Ordering[A1])       : Future[A]  = ???
-    def max[A1 >: A](implicit ord: Ordering[A1])       : Future[A]  = ???
+    def sum[A1 >: A](implicit num: Numeric[A1], ec: EC)     : Future[A1] = foldLeft(num.zero)(num.plus)
+    def product[A1 >: A](implicit num: Numeric[A1], ec: EC) : Future[A1] = foldLeft(num.one)(num.times)
+
+    def min[A1 >: A](implicit ord: Ordering[A1], ec: EC): Future[Option[A]] = {
+      xs.head flatMap {
+        case None    => xs.head
+        case Some(x) => foldLeft(x)((x, y) => if (ord.lteq(x, y)) x else y).map(Some(_))
+      }
+    }
+
+    def max[A1 >: A](implicit ord: Ordering[A1], ec: EC): Future[Option[A]] = {
+      xs.head flatMap {
+        case None    => xs.head
+        case Some(x) => foldLeft(x)((x, y) => if (ord.gteq(x, y)) x else y).map(Some(_))
+      }
+    }
+
     def minBy[B](f: A => B)(implicit cmp: Ordering[B]) : Future[A]  = ???
     def maxBy[B](f: A => B)(implicit cmp: Ordering[B]) : Future[A]  = ???
 
@@ -273,21 +292,30 @@ object AsyncSeq {
  // override def toString: String = super.toString
 
     // Conversions
-    def toArray[A1 >: A: ClassTag]: Future[Array[A1]] = ???
-    def toList: Future[List[A]] = ???
-    def toIndexedSeq: Future[scala.collection.immutable.IndexedSeq[A]] = ???
- // def toStream: Future[Stream[A]] = ???
-    def toIterator: Future[Iterator[A]] = ???
-    def toBuffer[A1 >: A]: Future[scala.collection.mutable.Buffer[A1]] = ???
-    def toTraversable: Future[Traversable[A]] = ???
-    def toIterable: Future[Iterable[A]] = ???
-    def toSeq[A1 >: A]: Future[Seq[A]] = ???
-    def toSet[A1 >: A]: Future[Set[A1]] = ???
-    def toMap[K, V](implicit ev: A <:< (K, V)): Future[Map[K, V]] = ???
-    def toVector(implicit ec: EC): Future[Vector[A]] = foldLeft(Vector.empty[A])(_ :+ _)
-    def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A @uV]]): Col[A @uV] = ???
+    // private def fromBuilder
+    def toArray[A1 >: A: ClassTag](implicit ec: EC)                    : Future[Array[A1]]          = foldLeft(Array.newBuilder[A1])(_ += _).map(_.result)
+    def toList(implicit ec: EC)                                        : Future[List[A]]            = foldLeft(List.newBuilder[A])(_ += _).map(_.result)
+    def toStream(implicit ec: EC)                                      : Future[Stream[A]]          = foldLeft(Stream.newBuilder[A])(_ += _).map(_.result)
+    def toBuffer[A1 >: A](implicit ec: EC)                             : Future[mutable.Buffer[A1]] = foldLeft(mutable.Buffer.newBuilder[A1])(_ += _).map(_.result)
+    def toSet[A1 >: A](implicit ec: EC)                                : Future[Set[A1]]            = foldLeft(Set.newBuilder[A1])(_ += _).map(_.result)
+    def toMap[K, V](implicit ev: A <:< (K, V), ec: EC)                 : Future[Map[K, V]]          = foldLeft(Map.newBuilder[K, V])(_ += ev(_)).map(_.result)
+    def toVector(implicit ec: EC)                                      : Future[Vector[A]]          = foldLeft(Vector.newBuilder[A])(_ += _).map(_.result)
 
-    def toStream: Stream[Future[Option[A]]] = {
+    def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A @uV]]) : Future[Col[A @uV]]         = {
+//      val b: mutable.Builder[A, Col[A]] = cbf()
+//      b.sizeHint(this)
+//      b ++= thisCollection
+//      b.result
+      ???
+    }
+
+    def toIterator   (implicit ec: EC) : Future[Iterator[A]]    = toVector.map(_.iterator)
+    def toIndexedSeq (implicit ec: EC) : Future[IndexedSeq[A]]  = toVector
+    def toSeq        (implicit ec: EC) : Future[Seq[A]]         = toIndexedSeq
+    def toIterable   (implicit ec: EC) : Future[Iterable[A]]    = toSeq
+    def toTraversable(implicit ec: EC) : Future[Traversable[A]] = toIterable
+
+    def toStreamFuture: Stream[Future[Option[A]]] = {
       lazy val stream: Stream[AsyncSeq[A]] = Stream.cons(xs, stream.map(_.tail))
       stream.map(_.head)
     }
