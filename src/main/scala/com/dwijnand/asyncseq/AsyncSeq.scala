@@ -292,14 +292,18 @@ object AsyncSeq {
  // override def toString: String = super.toString
 
     // Conversions
-    // private def fromBuilder
-    def toArray[A1 >: A: ClassTag](implicit ec: EC)                    : Future[Array[A1]]          = foldLeft(Array.newBuilder[A1])(_ += _).map(_.result)
-    def toList(implicit ec: EC)                                        : Future[List[A]]            = foldLeft(List.newBuilder[A])(_ += _).map(_.result)
-    def toStream(implicit ec: EC)                                      : Future[Stream[A]]          = foldLeft(Stream.newBuilder[A])(_ += _).map(_.result)
-    def toBuffer[A1 >: A](implicit ec: EC)                             : Future[mutable.Buffer[A1]] = foldLeft(mutable.Buffer.newBuilder[A1])(_ += _).map(_.result)
-    def toSet[A1 >: A](implicit ec: EC)                                : Future[Set[A1]]            = foldLeft(Set.newBuilder[A1])(_ += _).map(_.result)
-    def toMap[K, V](implicit ev: A <:< (K, V), ec: EC)                 : Future[Map[K, V]]          = foldLeft(Map.newBuilder[K, V])(_ += ev(_)).map(_.result)
-    def toVector(implicit ec: EC)                                      : Future[Vector[A]]          = foldLeft(Vector.newBuilder[A])(_ += _).map(_.result)
+    private[AsyncSeq] def fromBuilder[A1 >: A, CC[_]](b: mutable.Builder[A1, CC[A1]])(implicit ec: EC)
+    : Future[CC[A1]] =
+      foldLeft(b)(_ += _).map(_.result)
+
+    def toArray[A1 >: A: ClassTag](implicit ec: EC) : Future[Array[A1]]          = fromBuilder(Array.newBuilder[A1])
+    def toList(implicit ec: EC)                     : Future[List[A]]            = fromBuilder(List.newBuilder[A])
+    def toStream(implicit ec: EC)                   : Future[Stream[A]]          = fromBuilder(Stream.newBuilder[A])
+    def toBuffer[A1 >: A](implicit ec: EC)          : Future[mutable.Buffer[A1]] = fromBuilder(mutable.Buffer.newBuilder[A1])
+    def toSet[A1 >: A](implicit ec: EC)             : Future[Set[A1]]            = fromBuilder(Set.newBuilder[A1])
+    def toVector(implicit ec: EC)                   : Future[Vector[A]]          = fromBuilder(Vector.newBuilder[A])
+
+    def toMap[K, V](implicit ev: A <:< (K, V), ec: EC) : Future[Map[K, V]]          = foldLeft(Map.newBuilder[K, V])(_ += _).map(_.result)
 
     def to[Col[_]](implicit cbf: CanBuildFrom[Nothing, A, Col[A @uV]]) : Future[Col[A @uV]]         = {
 //      val b: mutable.Builder[A, Col[A]] = cbf()
