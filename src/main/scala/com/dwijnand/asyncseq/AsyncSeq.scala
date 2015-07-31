@@ -13,6 +13,7 @@ import scala.{ PartialFunction => ?=> }
 sealed trait AsyncSeq[+A] extends Any {
   def head: Future[Option[A]]
   def tail: AsyncSeq[A]
+  override def toString = this.mkString("AsyncSeq(", ", ", ")")
 }
 
 object AsyncSeq {
@@ -302,17 +303,6 @@ object AsyncSeq {
       loop(xs, start)
     }
 
-    // Strings
-    def mkString(start: String, sep: String, end: String): Future[String] = ???
-    def mkString(sep: String): Future[String] = ???
-    def mkString: Future[String] = ???
-
-    def addString(b: StringBuilder, start: String, sep: String, end: String): StringBuilder = ???
-    def addString(b: StringBuilder, sep: String): StringBuilder = ???
-    def addString(b: StringBuilder): StringBuilder = ???
-
- // override def toString: String = super.toString
-
     // Conversions
     private[AsyncSeq] def fromBuilder[A1 >: A, CC[_]](b: mutable.Builder[A1, CC[A1]])(implicit ec: EC)
     : Future[CC[A1]] =
@@ -343,6 +333,30 @@ object AsyncSeq {
     def toStreamFuture: Stream[Future[Option[A]]] = {
       lazy val stream: Stream[AsyncSeq[A]] = Stream.cons(xs, stream.map(_.tail))
       stream.map(_.head)
+    }
+
+    // Strings
+    def mkString                                         : String = mkString("")
+    def mkString(               sep: String             ): String = mkString("", sep, "")
+    def mkString(start: String, sep: String, end: String): String =
+      addString(new StringBuilder(), start, sep, end).toString
+
+    def addString(b: StringBuilder): StringBuilder = addString(b, "")
+    def addString(b: StringBuilder, sep: String): StringBuilder = addString(b, "", sep, "")
+    def addString(b: StringBuilder, start: String, sep: String, end: String): StringBuilder = {
+      @tailrec def loop(xs: AsyncSeq[A], first: Boolean): Unit = {
+        xs.head.value match {
+          case None                   => if (first) b append sep; b append '?'
+          case Some(Success(None))    =>
+          case Some(Success(Some(x))) => if (first) b append sep; b append x ; loop(xs.tail, first = false)
+          case Some(Failure(t))       => if (first) b append sep; b append s"[ex: $t]"
+        }
+      }
+
+      b append start
+      loop(xs, first = true)
+      b append end
+      b
     }
   }
 
