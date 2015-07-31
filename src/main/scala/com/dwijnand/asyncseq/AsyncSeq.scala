@@ -18,14 +18,7 @@ sealed trait AsyncSeq[+A] extends Any {
 object AsyncSeq {
   // TODO: Consider an Ops that captures the EC at the top
   implicit final class AsyncSeqOps[A](private val xs: AsyncSeq[A]) extends AnyVal {
-    def foreach[U](f: A => U)(implicit ec: EC): Future[Unit] =
-      xs.head flatMap {
-        case None    => Future.successful(())
-        case Some(x) => f(x) ; xs.tail foreach f
-      }
-
     // Size info
-
     @tailrec def hasDefiniteSize: Boolean =
       xs.head.value match {
         case None                => false
@@ -34,12 +27,19 @@ object AsyncSeq {
         case Some(Failure(_))    => true
       }
 
-    def size(implicit ec: EC)     : Future[Int]     = count(_ => true)
-    def isEmpty(implicit ec: EC)  : Future[Boolean] = xs.head.map(_.isEmpty)
-    def nonEmpty(implicit ec: EC) : Future[Boolean] = xs.head.map(_.nonEmpty)
+    def isEmpty (implicit ec: EC): Future[Boolean] = xs.head.map(_.isEmpty)
+    def nonEmpty(implicit ec: EC): Future[Boolean] = xs.head.map(_.nonEmpty)
+    def size    (implicit ec: EC): Future[Int]     = count(_ => true)
+    def length  (implicit ec: EC): Future[Int]     = size
+
+    def foreach[U](f: A => U)(implicit ec: EC): Future[Unit] =
+      xs.head flatMap {
+        case None    => Future.successful(())
+        case Some(x) => f(x) ; xs.tail foreach f
+      }
 
     // Iterators
-    def iterator: Future[Iterator[A]] = ???
+    def iterator(implicit ec: EC): Future[Iterator[A]] = toIterator
 
     // Element Retrieval
     def head: Future[Option[A]] = xs.head
@@ -67,9 +67,7 @@ object AsyncSeq {
 
     def isDefinedAt(idx: Int)(implicit ec: EC): Future[Boolean] =
       if (idx < 0) Future successful false
-      else lengthCompare(idx) map (_ > 0)
-
-    def length(implicit ec: EC): Future[Int] = size
+      else lengthCompare(idx).map(_ > 0)
 
     def lengthCompare(len: Int)(implicit ec: EC): Future[Int] = {
       def loop(i: Int, xs: AsyncSeq[A]): Future[Int] =
@@ -83,7 +81,7 @@ object AsyncSeq {
       else loop(0, xs)
     }
 
-    def indices: AsyncSeq[Int] = ???
+    def indices(implicit ec: EC): AsyncSeq[Int] = ??? /// 0 until length
 
     // Index Search
     def indexOf[A1 >: A](x: A1)                            : Future[Int] = indexWhere(_ == x)
@@ -102,8 +100,8 @@ object AsyncSeq {
     // Addition
     def ++[A1 >: A]( ys: AsyncSeq[A1])     : AsyncSeq[A1] = ???
     def ++:[A1 >: A](ys: AsyncSeq[A1])     : AsyncSeq[A1] = ???
-    def +:[A1 >: A](elem: A1)              : AsyncSeq[A1] = ???
-    def :+[A1 >: A](elem: A1)              : AsyncSeq[A1] = ???
+    def +:[A1 >: A](elem: A1)              : AsyncSeq[A1] = ??? // prepend
+    def :+[A1 >: A](elem: A1)              : AsyncSeq[A1] = ??? // append
     def padTo[A1 >: A](len: Int, elem: A1) : AsyncSeq[A1] = ???
 
     // Updates
