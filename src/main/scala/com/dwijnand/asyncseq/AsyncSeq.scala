@@ -17,7 +17,6 @@ sealed trait AsyncSeq[+A] extends Any {
 }
 
 object AsyncSeq {
-  // TODO: Consider an Ops that captures the EC at the top
   implicit final class AsyncSeqOps[A](private val xs: AsyncSeq[A]) extends AnyVal {
     // Size info
     @tailrec def hasDefiniteSize: Boolean =
@@ -281,8 +280,6 @@ object AsyncSeq {
     def flatten[B](implicit ec: EC, ev: A <:< AsyncSeq[B]): AsyncSeq[B] = AsyncSeq.flatten(xs)
  // def flatten[B](implicit ec: EC, ev: A <:< AsyncSeq[B]): AsyncSeq[B] = xs.foldLeft(AsyncSeq[B]())((b, a) => b ++ ev(a))
 
-    def remove(p: A => Boolean): AsyncSeq[A] = ???
-
     // Copying
     def copyToBuffer[B >: A](xs: mutable.Buffer[B])(implicit ec: EC): Future[Unit] = toVector.map(xs ++= _)
 
@@ -332,13 +329,15 @@ object AsyncSeq {
     }
 
     // Strings
-    def mkString                                         : String = mkString("")
-    def mkString(               sep: String             ): String = mkString("", sep, "")
+    def mkString             : String = mkString("")
+    def mkString(sep: String): String = mkString("", sep, "")
+
     def mkString(start: String, sep: String, end: String): String =
       addString(new StringBuilder(), start, sep, end).toString
 
-    def addString(b: StringBuilder): StringBuilder = addString(b, "")
+    def addString(b: StringBuilder)             : StringBuilder = addString(b, "")
     def addString(b: StringBuilder, sep: String): StringBuilder = addString(b, "", sep, "")
+
     def addString(b: StringBuilder, start: String, sep: String, end: String): StringBuilder = {
       @tailrec def loop(xs: AsyncSeq[A], first: Boolean): Unit = {
         xs.head.value match {
@@ -360,7 +359,7 @@ object AsyncSeq {
 
   object Empty extends AsyncSeq[Nothing] {
     def head = Future successful None
-    def tail   = Empty
+    def tail = Empty
   }
 
   def apply[A](as: A*): AsyncSeq[A] = {
