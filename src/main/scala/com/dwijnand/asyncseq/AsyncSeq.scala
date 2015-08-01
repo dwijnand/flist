@@ -218,16 +218,15 @@ object AsyncSeq {
     def reduceLeft[B >: A](op: (B, A) => B)(implicit ec: EC): Future[Option[B]] =
       xs.head flatMap {
         case None    => xs.head
-        case Some(x) => tail.foldLeft[B](x)(op).map(Some(_))
+        case Some(x) => xs.tail.foldLeft[B](x)(op).map(Some(_))
       }
 
     def reduceRight[B >: A](op: (A, B) => B)(implicit ec: EC): Future[Option[B]] =
       xs.head flatMap {
         case None    => xs.head
         case Some(x) =>
-          tail.isEmpty.flatMap { isEmpty =>
-            // TOOD: unsure
-            if (isEmpty) xs.head else tail.reduceRight(op).map(b => b.map(b => op(x, b)))
+          xs.tail.isEmpty.flatMap { isEmpty =>
+            if (isEmpty) xs.head else xs.tail.reduceRight(op).map(b => b.map(b => op(x, b)))
           }
       }
 
