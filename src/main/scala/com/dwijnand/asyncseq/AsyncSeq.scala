@@ -208,7 +208,24 @@ final class AsyncSeq[+A] private {
   private def filterImpl(p: A => Boolean, isFlipped: Boolean): AsyncSeq[A] = ???
 
   // Other iterators
-  def grouped(size: Int)            : AsyncSeq[Vector[A]] = ???
+  def grouped(size: Int)(implicit ec: EC): AsyncSeq[AsyncSeq[A]] = {
+    def loop(xs0: AsyncSeq[A], xs: AsyncSeq[A], n: Int, grouped: AsyncSeq[AsyncSeq[A]]): Unit = {
+      if (n > 0) {
+        xs0.head onComplete {
+          case Success(Some(x)) => xs.promise success Some(x); loop(xs0.tail, xs.tail, n - 1, grouped)
+          case t                => xs.promise complete t; grouped.promise success Some(xs)
+        }
+      } else {
+        grouped.promise success Some(xs)
+        loop(xs0, new AsyncSeq[A], size, grouped.tail)
+      }
+    }
+
+    val grouped = new AsyncSeq[AsyncSeq[A]]
+    loop(this, new AsyncSeq[A], size, grouped)
+    grouped
+  }
+
   def sliding(size: Int)            : AsyncSeq[Vector[A]] = ???
   def sliding(size: Int, step: Int) : AsyncSeq[Vector[A]] = ???
 

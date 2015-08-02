@@ -112,18 +112,22 @@ final class AwsClient(asgClient: AsgClient) {
       .grouped(50)
       .map(asgs =>
         AsyncSeq.fromFuture(
-          getLcs2(LcReq(asgs.map(_.lcName)))
-            .map(lc => lc.name -> lc)
-            .toMap
-            .map { lcs =>
-              asgs flatMap { asg =>
-                lcs get asg.lcName match {
-                  case Some(lc) => Some((asg, lc))
-                  case None     => println(s"Dropping asg with no lc: $asg"); None
+          asgs
+            .toVector
+            .flatMap { asgs =>
+              getLcs2(LcReq(asgs.map(_.lcName)))
+                .map(lc => lc.name -> lc)
+                .toMap
+                .map { lcs =>
+                  asgs flatMap { asg =>
+                    lcs get asg.lcName match {
+                      case Some(lc) => Some((asg, lc))
+                      case None     => println(s"Dropping asg with no lc: $asg"); None
+                    }
+                  }
                 }
-              }
+                .map(AsyncSeq.fromSeq)
             }
-            .map(AsyncSeq.fromSeq)
         )
       )
       .flatten
