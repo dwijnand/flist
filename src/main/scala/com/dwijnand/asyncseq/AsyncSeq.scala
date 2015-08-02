@@ -215,14 +215,14 @@ object AsyncSeq {
       }
     }
 
-    def reduceLeft[B >: A](op: (B, A) => B)(implicit ec: EC): Future[Option[B]] =
+    def reduceLeft[A1 >: A](op: (A1, A) => A1)(implicit ec: EC): Future[Option[A1]] =
       xs.head flatMap {
-        case Some(x) => xs.tail.foldLeft[B](x)(op).map(Some(_))
+        case Some(x) => xs.tail.foldLeft[A1](x)(op).map(Some(_))
         case None    => xs.head
       }
 
-    def reduceRight[B >: A](op: (A, B) => B)(implicit ec: EC): Future[Option[B]] = {
-      def loop(x: A, xs: AsyncSeq[A]): Future[Option[B]] =
+    def reduceRight[A1 >: A](op: (A, A1) => A1)(implicit ec: EC): Future[Option[A1]] = {
+      def loop(x: A, xs: AsyncSeq[A]): Future[Option[A1]] =
         xs.tail.head flatMap {
           case Some(y) => loop(y, xs.tail).map(b => b.map(b => op(x, b)))
           case None    => xs.head
@@ -237,19 +237,11 @@ object AsyncSeq {
     def sum    [A1 >: A](implicit num: Numeric[A1], ec: EC): Future[A1] = foldLeft(num.zero)(num.plus)
     def product[A1 >: A](implicit num: Numeric[A1], ec: EC): Future[A1] = foldLeft(num.one)(num.times)
 
-    def min[A1 >: A](implicit ord: Ordering[A1], ec: EC): Future[Option[A]] = {
-      xs.head flatMap {
-        case Some(x) => foldLeft(x)((x, y) => if (ord.lteq(x, y)) x else y).map(Some(_))
-        case None    => xs.head
-      }
-    }
+    def min[A1 >: A](implicit ord: Ordering[A1], ec: EC): Future[Option[A]] =
+      reduceLeft((x, y) => if (ord.lteq(x, y)) x else y)
 
-    def max[A1 >: A](implicit ord: Ordering[A1], ec: EC): Future[Option[A]] = {
-      xs.head flatMap {
-        case Some(x) => foldLeft(x)((x, y) => if (ord.gteq(x, y)) x else y).map(Some(_))
-        case None    => xs.head
-      }
-    }
+    def max[A1 >: A](implicit ord: Ordering[A1], ec: EC): Future[Option[A]] =
+      reduceLeft((x, y) => if (ord.gteq(x, y)) x else y)
 
     def minBy[B](f: A => B)(implicit ord: Ordering[B], ec: EC): Future[Option[A]] = {
       xs.head flatMap {
