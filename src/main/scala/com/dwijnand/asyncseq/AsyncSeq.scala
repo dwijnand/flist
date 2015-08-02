@@ -173,8 +173,18 @@ final class AsyncSeq[+A] private {
     else AsyncSeq fromFuture isEmpty.map(if (_) this else tail drop n - 1)
   }
 
-  def dropRight(n: Int)            : AsyncSeq[A] = ???
-  def dropWhile(p: A => Boolean)   : AsyncSeq[A] = ???
+  def dropRight(n: Int): AsyncSeq[A] = ???
+
+  def dropWhile(p: A => Boolean): AsyncSeq[A] = {
+    AsyncSeq.fromFuture(
+      head map {
+        case Some(x) if p(x) => tail dropWhile p
+        case Some(_)         => tail
+        case None            => this
+      }
+    )
+  }
+
   def take(n: Int)                 : AsyncSeq[A] = ???
   def takeRight(n: Int)            : AsyncSeq[A] = ???
   def takeWhile(p: A => Boolean)   : AsyncSeq[A] = ???
