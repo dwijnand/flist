@@ -15,7 +15,7 @@ final class AsyncSeq[+A] private {
 
   val head: Future[Option[A]] = promise.future
 
-  lazy val tail: AsyncSeq[A] = new AsyncSeq[A]()
+  lazy val tail: AsyncSeq[A] = new AsyncSeq[A]
 
   // Size info
   @tailrec def hasDefiniteSize: Boolean =
@@ -157,7 +157,7 @@ final class AsyncSeq[+A] private {
       }
       xs
     }
-    loop(new AsyncSeq[B](), this)
+    loop(new AsyncSeq[B], this)
   }
 
   def flatMap[B](f: A => AsyncSeq[B])(implicit ec: EC) : AsyncSeq[B] = map(f).flatten
@@ -175,14 +175,13 @@ final class AsyncSeq[+A] private {
 
   def dropRight(n: Int): AsyncSeq[A] = ???
 
-  def dropWhile(p: A => Boolean): AsyncSeq[A] = {
-    AsyncSeq.fromFuture(
-      head map {
+  def dropWhile(p: A => Boolean)(implicit ec: EC): AsyncSeq[A] = {
+    AsyncSeq fromFuture
+      head.map {
         case Some(x) if p(x) => tail dropWhile p
         case Some(_)         => tail
         case None            => this
       }
-    )
   }
 
   def take(n: Int)                 : AsyncSeq[A] = ???
@@ -400,7 +399,7 @@ object AsyncSeq {
         case h :: t => xs.promise success Some(list.head) ; loop(xs.tail, t)
         case Nil    => xs.promise success None
       }
-    val xs = new AsyncSeq[A]()
+    val xs = new AsyncSeq[A]
     loop(xs, seq.toList)
     xs
   }
@@ -417,7 +416,7 @@ object AsyncSeq {
       }
       xs
     }
-    loop(new AsyncSeq[A](), head)
+    loop(new AsyncSeq[A], head)
   }
 
   def fromFuture[A](f: Future[AsyncSeq[A]])(implicit ec: EC): AsyncSeq[A] = {
@@ -428,6 +427,6 @@ object AsyncSeq {
       }
       xs
     }
-    loop(new AsyncSeq[A](), f)
+    loop(new AsyncSeq[A], f)
   }
 }
