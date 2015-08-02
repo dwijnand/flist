@@ -371,6 +371,14 @@ object AsyncSeq {
     def tail = Empty
   }
 
+  final class Simple[A] private[AsyncSeq] extends AsyncSeq[A] {
+    private[AsyncSeq] val promise = Promise[Option[A]]()
+
+    val head: Future[Option[A]] = promise.future
+
+    lazy val tail = new Simple[A]()
+  }
+
   final class Seed[A] private[AsyncSeq] (fetch: A => Option[Future[A]])(implicit ec: EC) extends AsyncSeq[A] {
     private[AsyncSeq] val promise = Promise[Option[A]]()
 
