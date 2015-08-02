@@ -262,7 +262,7 @@ object AsyncSeq {
     def scanLeft[B]( z: B)(op: (B, A) => B): AsyncSeq[B] = ???
     def scanRight[B](z: B)(op: (A, B) => B): AsyncSeq[B] = ???
 
-    def flatten[B](implicit ec: EC, ev: A <:< AsyncSeq[B]): AsyncSeq[B] = AsyncSeq.flatten(xs)
+    def flatten[B](implicit ec: EC, ev: A <:< AsyncSeq[B]): AsyncSeq[B] = AsyncSeq.flatten(xs map ev)
  // def flatten[B](implicit ec: EC, ev: A <:< AsyncSeq[B]): AsyncSeq[B] = xs.foldLeft(AsyncSeq[B]())((b, a) => b ++ ev(a))
 
     // Copying
@@ -358,15 +358,9 @@ object AsyncSeq {
     mapped
   }
 
-  def flatMap[A, B](xs: AsyncSeq[A], f: A => AsyncSeq[B])(implicit ec: EC): AsyncSeq[B] = {
-//    val flatMapped = new FlatMapped(xs, f)
-//    flatMapped.promise
-//    flatMapped
-    ???
-  }
+  def flatMap[A, B](xs: AsyncSeq[A], f: A => AsyncSeq[B])(implicit ec: EC): AsyncSeq[B] = flatten(map(xs, f))
 
-  def flatten[A, B](xs: AsyncSeq[A])(implicit ec: EC, ev: A <:< AsyncSeq[B]): AsyncSeq[B] = {
-    // xs flatMap ev
+  def flatten[A](xss0: AsyncSeq[AsyncSeq[A]])(implicit ec: EC): AsyncSeq[A] = {
     ???
   }
 
@@ -404,16 +398,6 @@ object AsyncSeq {
       case Some(_) => tail.promise tryCompleteWith xs.tail.head.map(_ map f)
     }
   }
-
-//  final class FlatMapped[A, B] private[AsyncSeq] (xs: AsyncSeq[A], f: A => AsyncSeq[B])(implicit ec: EC)
-//    extends AsyncSeq[B]
-//  {
-//    private[AsyncSeq] val promise = Promise[Option[B]]()
-//
-//    val future: Future[Option[B]] = promise.future
-//
-//    lazy val tail = new FlatMapped(xs.tail, f)
-//  }
 
   final class FromFuture[A](f: Future[AsyncSeq[A]])(implicit ec: EC) extends AsyncSeq[A] {
     private[AsyncSeq] val promise = Promise[Option[A]]()
