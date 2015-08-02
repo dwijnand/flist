@@ -375,7 +375,7 @@ object AsyncSeq {
     ???
   }
 
-  def tbd01[A](f: Future[AsyncSeq[A]]): AsyncSeq[A] = ???
+  def fromFuture[A](f: Future[AsyncSeq[A]])(implicit ec: EC): AsyncSeq[A] = new FromFuture[A](f)
 
   final class Seed[A] private[AsyncSeq] (fetch: A => Option[Future[A]])(implicit ec: EC) extends AsyncSeq[A] {
     private[AsyncSeq] val promise = Promise[Option[A]]()
@@ -414,4 +414,17 @@ object AsyncSeq {
 //
 //    lazy val tail = new FlatMapped(xs.tail, f)
 //  }
+
+  final class FromFuture[A](f: Future[AsyncSeq[A]])(implicit ec: EC) extends AsyncSeq[A] {
+    private[AsyncSeq] val promise = Promise[Option[A]]()
+
+    val head: Future[Option[A]] = promise.future
+
+    lazy val tail = new FromFuture(f.map(_.tail))
+
+    promise tryCompleteWith f.flatMap(_.head)
+    head onSuccess {
+      case Some(result) => tail
+    }
+  }
 }
