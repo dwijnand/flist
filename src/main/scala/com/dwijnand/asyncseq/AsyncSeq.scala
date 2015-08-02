@@ -359,7 +359,7 @@ object AsyncSeq {
     }
   }
 
-  def apply[A](head: Future[A], fetch: A => Option[Future[A]])(implicit ec: EC): AsyncSeq[A] = {
+  def unpaginate[A](head: Future[A])(fetch: A => Option[Future[A]])(implicit ec: EC): AsyncSeq[A] = {
     val seed = new Seed(fetch)
     seed.promise tryCompleteWith head.map(Some(_))
     seed
