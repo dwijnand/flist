@@ -45,11 +45,17 @@ final class AsyncSeq[+A] private {
   // Element Retrieval
 //def head: Future[Option[A]] = head
 
-  def last(implicit ec: EC): Future[Option[A]] =
+  def last(implicit ec: EC): Future[Option[A]] = {
+    def loop(xs: AsyncSeq[A]): Future[Option[A]] =
+      xs.tail.head flatMap {
+        case None    => xs.head
+        case Some(_) => loop(xs.tail)
+      }
     head flatMap {
       case None    => head
-      case Some(x) => tail.last
+      case Some(x) => loop(this)
     }
+  }
 
   def find(p: A => Boolean)(implicit ec: EC): Future[Option[A]] =
     head flatMap {
