@@ -183,10 +183,10 @@ final class AsyncSeq[+A] private {
   def zipWithIndex[A1 >: A]                            : AsyncSeq[(A1, Int)] = ???
 
   // Subdivisions
-  def splitAt(n: Int)            : Future[(AsyncSeq[A], AsyncSeq[A])] = ???
-  def span(p: A => Boolean)      : Future[(AsyncSeq[A], AsyncSeq[A])] = ???
-  def partition(p: A => Boolean) : Future[(AsyncSeq[A], AsyncSeq[A])] = ???
-  def groupBy[K](f: A => K)      : Future[Map[K, AsyncSeq[A]]]        = ???
+  def splitAt(n: Int)            : (AsyncSeq[A], AsyncSeq[A])  = ???
+  def span(p: A => Boolean)      : (AsyncSeq[A], AsyncSeq[A])  = ???
+  def partition(p: A => Boolean) : (AsyncSeq[A], AsyncSeq[A])  = ???
+  def groupBy[K](f: A => K)      : Future[Map[K, AsyncSeq[A]]] = ???
 
   // Element Conditions
   def forall(p: A => Boolean)(implicit ec: EC): Future[Boolean] =
