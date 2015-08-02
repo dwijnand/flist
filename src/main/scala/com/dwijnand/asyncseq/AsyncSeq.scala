@@ -325,10 +325,10 @@ object AsyncSeq {
     def addString(b: StringBuilder, start: String, sep: String, end: String): StringBuilder = {
       @tailrec def loop(xs: AsyncSeq[A], first: Boolean): Unit = {
         xs.head.value match {
-          case None                   => if (first) b append sep; b append '?'
+          case None                   => if (!first) b append sep; b append '?'
           case Some(Success(None))    =>
-          case Some(Success(Some(x))) => if (first) b append sep; b append x ; loop(xs.tail, first = false)
-          case Some(Failure(t))       => if (first) b append sep; b append s"[ex: $t]"
+          case Some(Success(Some(x))) => if (!first) b append sep; b append x ; loop(xs.tail, first = false)
+          case Some(Failure(t))       => if (!first) b append sep; b append s"[ex: $t]"
         }
       }
 
