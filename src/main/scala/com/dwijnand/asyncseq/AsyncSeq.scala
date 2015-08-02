@@ -221,14 +221,17 @@ object AsyncSeq {
         case None    => xs.head
       }
 
-    def reduceRight[B >: A](op: (A, B) => B)(implicit ec: EC): Future[Option[B]] =
+    def reduceRight[B >: A](op: (A, B) => B)(implicit ec: EC): Future[Option[B]] = {
+      def loop(x: A, xs: AsyncSeq[A]): Future[Option[B]] =
+        xs.tail.head flatMap {
+          case Some(y) => loop(y, xs.tail).map(b => b.map(b => op(x, b)))
+          case None    => xs.head
+        }
       xs.head flatMap {
-        case Some(x) =>
-          xs.tail.isEmpty flatMap { isEmpty =>
-            if (isEmpty) xs.head else xs.tail.reduceRight(op).map(b => b.map(b => op(x, b)))
-          }
+        case Some(x) => loop(x, xs)
         case None    => xs.head
       }
+    }
 
     // Specific Folds
     def sum    [A1 >: A](implicit num: Numeric[A1], ec: EC): Future[A1] = foldLeft(num.zero)(num.plus)
@@ -236,39 +239,39 @@ object AsyncSeq {
 
     def min[A1 >: A](implicit ord: Ordering[A1], ec: EC): Future[Option[A]] = {
       xs.head flatMap {
-        case None    => xs.head
         case Some(x) => foldLeft(x)((x, y) => if (ord.lteq(x, y)) x else y).map(Some(_))
+        case None    => xs.head
       }
     }
 
     def max[A1 >: A](implicit ord: Ordering[A1], ec: EC): Future[Option[A]] = {
       xs.head flatMap {
-        case None    => xs.head
         case Some(x) => foldLeft(x)((x, y) => if (ord.gteq(x, y)) x else y).map(Some(_))
+        case None    => xs.head
       }
     }
 
     def minBy[B](f: A => B)(implicit ord: Ordering[B], ec: EC): Future[Option[A]] = {
       xs.head flatMap {
-        case None    => xs.head
         case Some(x) =>
           foldLeft((x, f(x))) { case ((x, fx), y) =>
             val fy = f(y)
             if (ord.lt(fx, fy)) (x, fx) else (y, fy)
           }
           .map(t => Some(t._1))
+        case None    => xs.head
       }
     }
 
     def maxBy[B](f: A => B)(implicit ord: Ordering[B], ec: EC): Future[Option[A]] = {
       xs.head flatMap {
-        case None    => xs.head
         case Some(x) =>
           foldLeft((x, f(x))) { case ((x, fx), y) =>
             val fy = f(y)
             if (ord.gt(fx, fy)) (x, fx) else (y, fy)
           }
           .map(t => Some(t._1))
+        case None    => xs.head
       }
     }
 
