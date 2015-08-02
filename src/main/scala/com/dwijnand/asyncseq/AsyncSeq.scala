@@ -271,6 +271,27 @@ final class AsyncSeq[+A] private {
   def scanLeft[B]( z: B)(op: (B, A) => B): AsyncSeq[B] = ???
   def scanRight[B](z: B)(op: (A, B) => B): AsyncSeq[B] = ???
 
+  def flatten[B](implicit ec: EC, ev: A <:< AsyncSeq[B]): AsyncSeq[B] = {
+    def loopSeqOfSeq(xs: AsyncSeq[B], xss1: AsyncSeq[A]): AsyncSeq[B] = {
+      xss1.head onComplete {
+        case Success(Some(xs1)) => loopSeq(xs, xs1, xss1)
+        case Success(None)      => xs.promise success None
+        case Failure(t)         => xs.promise failure t
+      }
+      xs
+    }
+
+    def loopSeq(xs: AsyncSeq[B], xs1: AsyncSeq[B], xss1: AsyncSeq[A]): Unit = {
+      xs1.head onComplete {
+        case Success(Some(x)) => xs.promise success Some(x) ; loopSeq(xs.tail, xs1.tail, xss1)
+        case Success(None)    => loopSeqOfSeq(xs, xss1.tail)
+        case Failure(t)       => xs.promise failure t
+      }
+    }
+
+    loopSeqOfSeq(new AsyncSeq[B], this)
+  }
+
   // Copying
   def copyToBuffer[B >: A](xs: mutable.Buffer[B])(implicit ec: EC): Future[Unit] = toVector.map(xs ++= _)
 
@@ -303,6 +324,9 @@ final class AsyncSeq[+A] private {
   def toList  (implicit ec: EC): Future[List[A]]   = to[List]
   def toStream(implicit ec: EC): Future[Stream[A]] = to[Stream]
   def toVector(implicit ec: EC): Future[Vector[A]] = to[Vector]
+
+  def toMap[K, V](implicit ec: EC, ev: A <:< (K, V)): Future[Map[K, V]] =
+    foldLeft(Map.newBuilder[K, V])(_ += _).map(_.result)
 
   def toIterator   (implicit ec: EC): Future[Iterator[A]]    = toVector.map(_.iterator)
   def toIndexedSeq (implicit ec: EC): Future[IndexedSeq[A]]  = toVector
@@ -345,33 +369,6 @@ final class AsyncSeq[+A] private {
 }
 
 object AsyncSeq {
-  implicit final class AsyncMatrixOps[A](private val xss: AsyncSeq[AsyncSeq[A]]) extends AnyVal {
-    def flatten(implicit ec: EC): AsyncSeq[A] = {
-      def loopSeqOfSeq(xs: AsyncSeq[A], xss1: AsyncSeq[AsyncSeq[A]]): AsyncSeq[A] = {
-        xss1.head onComplete {
-          case Success(Some(xs1)) => loopSeq(xs, xs1, xss1)
-          case Success(None)      => xs.promise success None
-          case Failure(t)         => xs.promise failure t
-        }
-        xs
-      }
-
-      def loopSeq(xs: AsyncSeq[A], xs1: AsyncSeq[A], xss1: AsyncSeq[AsyncSeq[A]]): Unit = {
-        xs1.head onComplete {
-          case Success(Some(x)) => xs.promise success Some(x) ; loopSeq(xs.tail, xs1.tail, xss1)
-          case Success(None)    => loopSeqOfSeq(xs, xss1.tail)
-          case Failure(t)       => xs.promise failure t
-        }
-      }
-
-      loopSeqOfSeq(new AsyncSeq[A], xss)
-    }
-  }
-
-  implicit final class AsyncMapOps[K, V](private val xs: AsyncSeq[(K, V)]) extends AnyVal {
-    def toMap(implicit ec: EC): Future[Map[K, V]] = xs.foldLeft(Map.newBuilder[K, V])(_ += _).map(_.result)
-  }
-
   def empty[A]: AsyncSeq[A] = apply()
 
   def apply[A](seq: A*): AsyncSeq[A] = fromSeq(seq)
