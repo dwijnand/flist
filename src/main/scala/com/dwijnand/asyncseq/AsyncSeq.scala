@@ -361,7 +361,29 @@ object AsyncSeq {
   def flatMap[A, B](xs: AsyncSeq[A], f: A => AsyncSeq[B])(implicit ec: EC): AsyncSeq[B] = flatten(map(xs, f))
 
   def flatten[A](xss0: AsyncSeq[AsyncSeq[A]])(implicit ec: EC): AsyncSeq[A] = {
-    ???
+    val simple0 = new Simple[A]
+
+    loopSeqOfSeq(simple0, xss0)
+
+    def loopSeqOfSeq(simple: Simple[A], xss: AsyncSeq[AsyncSeq[A]]): Unit = {
+      xss.head onComplete {
+        case Success(Some(xs)) => loopSeq(simple, xs, xss)
+        case Success(None)     => simple.promise success None
+        case Failure(t)        => simple.promise failure t
+      }
+    }
+
+    def loopSeq(simple: Simple[A], xs: AsyncSeq[A], xss: AsyncSeq[AsyncSeq[A]]): Unit = {
+      xs.head onComplete {
+        case Success(Some(x)) =>
+          simple.promise success Some(x)
+          loopSeq(simple.tail, xs.tail, xss)
+        case Success(None)    => loopSeqOfSeq(simple, xss.tail)
+        case Failure(t)       => simple.promise failure t
+      }
+    }
+
+    simple0
   }
 
   def fromFuture[A](f: Future[AsyncSeq[A]])(implicit ec: EC): AsyncSeq[A] = new FromFuture[A](f)
