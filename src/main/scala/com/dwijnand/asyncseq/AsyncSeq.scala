@@ -17,6 +17,14 @@ sealed trait AsyncSeq[+A] extends Any {
 }
 
 object AsyncSeq {
+  final class AsyncSeqImpl[A] private[AsyncSeq] extends AsyncSeq[A] {
+    private[AsyncSeq] val promise = Promise[Option[A]]()
+
+    val head: Future[Option[A]] = promise.future
+
+    lazy val tail: AsyncSeqImpl[A] = new AsyncSeqImpl[A]()
+  }
+
   implicit final class AsyncSeqOps[A](private val xs: AsyncSeq[A]) extends AnyVal {
     // Size info
     @tailrec def hasDefiniteSize: Boolean =
@@ -144,8 +152,18 @@ object AsyncSeq {
     def corresponds[B](ys: AsyncSeq[B])(p: (A, B) => Boolean) : Future[Boolean] = ???
 
     // Maps
-    def map[B](f: A => B)(implicit ec: EC)               : AsyncSeq[B] = AsyncSeq.map(xs, f)
-    def flatMap[B](f: A => AsyncSeq[B])(implicit ec: EC) : AsyncSeq[B] = AsyncSeq.flatMap(xs, f)
+    def map[B](f: A => B)(implicit ec: EC): AsyncSeq[B] = {
+      def loop(xs: AsyncSeqImpl[B], ws: AsyncSeq[A]): AsyncSeqImpl[B] = {
+        xs.promise tryCompleteWith ws.head.map(_ map f)
+        xs.head onSuccess {
+          case Some(_) => loop(xs.tail, ws.tail)
+        }
+        xs
+      }
+      loop(new AsyncSeqImpl[B](), xs)
+    }
+
+    def flatMap[B](f: A => AsyncSeq[B])(implicit ec: EC) : AsyncSeq[B] = map(f).flatten
     def collect[B](pf: A ?=> B)                          : AsyncSeq[B] = ???
 
     // Subcollections
@@ -262,9 +280,6 @@ object AsyncSeq {
     def scanLeft[B]( z: B)(op: (B, A) => B): AsyncSeq[B] = ???
     def scanRight[B](z: B)(op: (A, B) => B): AsyncSeq[B] = ???
 
-    def flatten[B](implicit ec: EC, ev: A <:< AsyncSeq[B]): AsyncSeq[B] = AsyncSeq.flatten(xs map ev)
- // def flatten[B](implicit ec: EC, ev: A <:< AsyncSeq[B]): AsyncSeq[B] = xs.foldLeft(AsyncSeq[B]())((b, a) => b ++ ev(a))
-
     // Copying
     def copyToBuffer[B >: A](xs: mutable.Buffer[B])(implicit ec: EC): Future[Unit] = toVector.map(xs ++= _)
 
@@ -297,9 +312,6 @@ object AsyncSeq {
     def toList  (implicit ec: EC): Future[List[A]]   = to[List]
     def toStream(implicit ec: EC): Future[Stream[A]] = to[Stream]
     def toVector(implicit ec: EC): Future[Vector[A]] = to[Vector]
-
-    def toMap[K, V](implicit ev: A <:< (K, V), ec: EC): Future[Map[K, V]] =
-      foldLeft(Map.newBuilder[K, V])(_ += _).map(_.result)
 
     def toIterator   (implicit ec: EC): Future[Iterator[A]]    = toVector.map(_.iterator)
     def toIndexedSeq (implicit ec: EC): Future[IndexedSeq[A]]  = toVector
@@ -337,121 +349,75 @@ object AsyncSeq {
       b append end
       b
     }
+
+    override def toString = this.mkString("AsyncSeq(", ", ", ")")
   }
 
-  def empty[A]: AsyncSeq[A] = Empty
-
-  def apply[A](xs: A*): AsyncSeq[A] = fromSeq(xs)
-
-  def fromSeq[A](xs: Seq[A]): AsyncSeq[A] = {
-    if (xs.isEmpty) empty
-    else {
-      val simple0 = new Simple[A]()
-      loop(simple0, xs.toList)
-      @tailrec def loop(simple: Simple[A], xs: List[A]): Unit =
-        xs match {
-          case h :: t =>
-            simple.promise success Some(xs.head)
-            loop(simple.tail, t)
-          case Nil => simple.promise success None
+  implicit final class AsyncMatrixOps[A](private val xss: AsyncSeq[AsyncSeq[A]]) extends AnyVal {
+    def flatten(implicit ec: EC): AsyncSeq[A] = {
+      def loopSeqOfSeq(xs: AsyncSeqImpl[A], xss1: AsyncSeq[AsyncSeq[A]]): AsyncSeqImpl[A] = {
+        xss1.head onComplete {
+          case Success(Some(xs1)) => loopSeq(xs, xs1, xss1)
+          case Success(None)      => xs.promise success None
+          case Failure(t)         => xs.promise failure t
         }
-      simple0
+        xs
+      }
+
+      def loopSeq(xs: AsyncSeqImpl[A], xs1: AsyncSeq[A], xss1: AsyncSeq[AsyncSeq[A]]): Unit = {
+        xs1.head onComplete {
+          case Success(Some(x)) => xs.promise success Some(x) ; loopSeq(xs.tail, xs1.tail, xss1)
+          case Success(None)    => loopSeqOfSeq(xs, xss1.tail)
+          case Failure(t)       => xs.promise failure t
+        }
+      }
+
+      loopSeqOfSeq(new AsyncSeqImpl[A], xss)
     }
+  }
+
+  implicit final class AsyncMapOps[K, V](private val xs: AsyncSeq[(K, V)]) extends AnyVal {
+    def toMap(implicit ec: EC): Future[Map[K, V]] = xs.foldLeft(Map.newBuilder[K, V])(_ += _).map(_.result)
+  }
+
+  def empty[A]: AsyncSeq[A] = apply()
+
+  def apply[A](seq: A*): AsyncSeq[A] = fromSeq(seq)
+
+  def fromSeq[A](seq: Seq[A]): AsyncSeq[A] = {
+    @tailrec def loop(xs: AsyncSeqImpl[A], list: List[A]): Unit =
+      list match {
+        case h :: t => xs.promise success Some(list.head) ; loop(xs.tail, t)
+        case Nil    => xs.promise success None
+      }
+    val xs = new AsyncSeqImpl[A]()
+    loop(xs, seq.toList)
+    xs
   }
 
   def unpaginate[A](head: Future[A])(fetch: A => Option[Future[A]])(implicit ec: EC): AsyncSeq[A] = {
-    val seed = new Seed(fetch)
-    seed.promise tryCompleteWith head.map(Some(_))
-    seed
-  }
-
-  def map[A, B](xs: AsyncSeq[A], f: A => B)(implicit ec: EC): AsyncSeq[B] = {
-    val mapped = new Mapped(xs, f)
-    mapped.promise tryCompleteWith xs.head.map(_ map f)
-    mapped
-  }
-
-  def flatMap[A, B](xs: AsyncSeq[A], f: A => AsyncSeq[B])(implicit ec: EC): AsyncSeq[B] = flatten(map(xs, f))
-
-  def flatten[A](xss0: AsyncSeq[AsyncSeq[A]])(implicit ec: EC): AsyncSeq[A] = {
-    val simple0 = new Simple[A]
-
-    loopSeqOfSeq(simple0, xss0)
-
-    def loopSeqOfSeq(simple: Simple[A], xss: AsyncSeq[AsyncSeq[A]]): Unit = {
-      xss.head onComplete {
-        case Success(Some(xs)) => loopSeq(simple, xs, xss)
-        case Success(None)     => simple.promise success None
-        case Failure(t)        => simple.promise failure t
+    def loop(xs: AsyncSeqImpl[A], f: Future[A]): AsyncSeqImpl[A] = {
+      xs.promise tryCompleteWith f.map(Some(_))
+      xs.head onSuccess {
+        case Some(result) =>
+          fetch(result) match {
+            case Some(nextResult) => loop(xs.tail, nextResult)
+            case None             => xs.tail.promise success None
+          }
       }
+      xs
     }
+    loop(new AsyncSeqImpl[A](), head)
+  }
 
-    def loopSeq(simple: Simple[A], xs: AsyncSeq[A], xss: AsyncSeq[AsyncSeq[A]]): Unit = {
-      xs.head onComplete {
-        case Success(Some(x)) =>
-          simple.promise success Some(x)
-          loopSeq(simple.tail, xs.tail, xss)
-        case Success(None)    => loopSeqOfSeq(simple, xss.tail)
-        case Failure(t)       => simple.promise failure t
+  def fromFuture[A](f: Future[AsyncSeq[A]])(implicit ec: EC): AsyncSeq[A] = {
+    def loop(xs: AsyncSeqImpl[A]): AsyncSeqImpl[A] = {
+      xs.promise tryCompleteWith f.flatMap(_.head)
+      xs.head onSuccess {
+        case Some(_) => loop(xs.tail)
       }
+      xs
     }
-
-    simple0
-  }
-
-  def fromFuture[A](f: Future[AsyncSeq[A]])(implicit ec: EC): AsyncSeq[A] = new FromFuture[A](f)
-
-  object Empty extends AsyncSeq[Nothing] {
-    def head = Future successful None
-    def tail = Empty
-  }
-
-  final class Simple[A] private[AsyncSeq] extends AsyncSeq[A] {
-    private[AsyncSeq] val promise = Promise[Option[A]]()
-
-    val head: Future[Option[A]] = promise.future
-
-    lazy val tail = new Simple[A]()
-  }
-
-  final class Seed[A] private[AsyncSeq] (fetch: A => Option[Future[A]])(implicit ec: EC) extends AsyncSeq[A] {
-    private[AsyncSeq] val promise = Promise[Option[A]]()
-
-    val head: Future[Option[A]] = promise.future
-
-    lazy val tail = new Seed(fetch)
-
-    head onSuccess {
-      case Some(result) =>
-        fetch(result) match {
-          case Some(nextResult) => tail.promise tryCompleteWith nextResult.map(Some(_))
-          case None             => tail.promise success None
-        }
-    }
-  }
-
-  final class Mapped[A, B] private[AsyncSeq] (xs: AsyncSeq[A], f: A => B)(implicit ec: EC) extends AsyncSeq[B] {
-    private[AsyncSeq] val promise = Promise[Option[B]]()
-
-    val head: Future[Option[B]] = promise.future
-
-    lazy val tail = new Mapped(xs.tail, f)
-
-    head onSuccess {
-      case Some(_) => tail.promise tryCompleteWith xs.tail.head.map(_ map f)
-    }
-  }
-
-  final class FromFuture[A](f: Future[AsyncSeq[A]])(implicit ec: EC) extends AsyncSeq[A] {
-    private[AsyncSeq] val promise = Promise[Option[A]]()
-
-    val head: Future[Option[A]] = promise.future
-
-    lazy val tail = new FromFuture(f.map(_.tail))
-
-    promise tryCompleteWith f.flatMap(_.head)
-    head onSuccess {
-      case Some(result) => tail // trigger tail to get initialised
-    }
+    loop(new AsyncSeqImpl[A]())
   }
 }
