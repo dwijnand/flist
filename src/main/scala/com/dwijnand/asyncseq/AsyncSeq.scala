@@ -282,13 +282,12 @@ object AsyncSeq {
     }
 
     // Conversions
-    private[AsyncSeq] def fromBuilder[A1 >: A, CC[_]](b: mutable.Builder[A1, CC[A1]])(implicit ec: EC)
-    : Future[CC[A1]] =
+    private def fromBuilder[A1 >: A, CC[_]](b: mutable.Builder[A1, CC[A1]])(implicit ec: EC): Future[CC[A1]] =
       foldLeft(b)(_ += _).map(_.result)
 
     def to[Col[_]](implicit cbf: CBF[Nothing, A, Col[A @uV]], ec: EC): Future[Col[A @uV]] = fromBuilder(cbf())
 
-    def to2[A1 >: A, Col[_]](implicit cbf: CBF[Nothing, A1, Col[A1 @uV]], ec: EC): Future[Col[A1 @uV]] =
+    private def to2[A1 >: A, Col[_]](implicit cbf: CBF[Nothing, A1, Col[A1 @uV]], ec: EC): Future[Col[A1 @uV]] =
       fromBuilder(cbf())
 
     def toArray [A1 >: A: ClassTag](implicit ec: EC): Future[Array[A1]]          = to2[A1, Array]
