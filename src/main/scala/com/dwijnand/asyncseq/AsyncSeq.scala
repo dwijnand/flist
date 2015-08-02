@@ -341,9 +341,20 @@ object AsyncSeq {
 
   def empty[A]: AsyncSeq[A] = Empty
 
-  def apply[A](as: A*): AsyncSeq[A] = {
-    if (as.isEmpty) ???
-    else ???
+  def apply[A](xs: A*): AsyncSeq[A] = {
+    if (xs.isEmpty) empty
+    else {
+      val simple0 = new Simple[A]()
+      loop(simple0, xs.toList)
+      @tailrec def loop(simple: Simple[A], xs: List[A]): Unit =
+        xs match {
+          case h :: t =>
+            simple.promise success Some(xs.head)
+            loop(simple.tail, t)
+          case Nil => simple.promise success None
+        }
+      simple0
+    }
   }
 
   def apply[A](head: Future[A], fetch: A => Option[Future[A]])(implicit ec: EC): AsyncSeq[A] = {
