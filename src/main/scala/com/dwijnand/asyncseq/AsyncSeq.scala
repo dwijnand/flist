@@ -198,6 +198,9 @@ object AsyncSeq {
       foldLeft(0)((res, x) => if (p(x)) res + 1 else res)
 
     // Folds
+    def fold  [A1 >: A](z: A1)(op: (A1, A1) => A1)(implicit ec: EC): Future[A1]         = foldLeft(z)(op)
+    def reduce[A1 >: A]       (op: (A1, A1) => A1)(implicit ec: EC): Future[Option[A1]] = reduceLeft(op)
+
     def foldLeft[B](z: B)(op: (B, A) => B)(implicit ec: EC): Future[B] = {
       xs.head flatMap {
         case Some(x) => xs.tail.foldLeft(op(z, x))(op)
@@ -212,24 +215,20 @@ object AsyncSeq {
       }
     }
 
-    def fold[A1 >: A](z: A1)(op: (A1, A1) => A1)(implicit ec: EC): Future[A1] = foldLeft(z)(op)
-
     def reduceLeft[B >: A](op: (B, A) => B)(implicit ec: EC): Future[Option[B]] =
       xs.head flatMap {
-        case None    => xs.head
         case Some(x) => xs.tail.foldLeft[B](x)(op).map(Some(_))
+        case None    => xs.head
       }
 
     def reduceRight[B >: A](op: (A, B) => B)(implicit ec: EC): Future[Option[B]] =
       xs.head flatMap {
-        case None    => xs.head
         case Some(x) =>
-          xs.tail.isEmpty.flatMap { isEmpty =>
+          xs.tail.isEmpty flatMap { isEmpty =>
             if (isEmpty) xs.head else xs.tail.reduceRight(op).map(b => b.map(b => op(x, b)))
           }
+        case None    => xs.head
       }
-
-    def reduce[A1 >: A](op: (A1, A1) => A1)(implicit ec: EC): Future[Option[A1]] = reduceLeft(op)
 
     // Specific Folds
     def sum    [A1 >: A](implicit num: Numeric[A1], ec: EC): Future[A1] = foldLeft(num.zero)(num.plus)
