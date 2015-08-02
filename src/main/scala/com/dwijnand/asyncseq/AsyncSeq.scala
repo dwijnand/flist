@@ -341,7 +341,9 @@ object AsyncSeq {
 
   def empty[A]: AsyncSeq[A] = Empty
 
-  def apply[A](xs: A*): AsyncSeq[A] = {
+  def apply[A](xs: A*): AsyncSeq[A] = fromSeq(xs)
+
+  def fromSeq[A](xs: Seq[A]): AsyncSeq[A] = {
     if (xs.isEmpty) empty
     else {
       val simple0 = new Simple[A]()
