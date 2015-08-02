@@ -164,9 +164,9 @@ object AsyncSeq {
     private def filterImpl(p: A => Boolean, isFlipped: Boolean): AsyncSeq[A] = ???
 
     // Other iterators
-    def grouped(size: Int)            : Future[Iterator[AsyncSeq[A]]] = ???
-    def sliding(size: Int)            : Future[Iterator[AsyncSeq[A]]] = ???
-    def sliding(size: Int, step: Int) : Future[Iterator[AsyncSeq[A]]] = ???
+    def grouped(size: Int)            : AsyncSeq[Vector[A]] = ???
+    def sliding(size: Int)            : AsyncSeq[Vector[A]] = ???
+    def sliding(size: Int, step: Int) : AsyncSeq[Vector[A]] = ???
 
     // Zippers
     def zip[A1 >: A, B](ys: AsyncSeq[B])                 : AsyncSeq[(A1, B)]   = ???
