@@ -25,13 +25,22 @@ object Main {
 
     val (asgsAndLcs: Vector[(Asg, Lc)], timed: Duration) =
       TimedFuture {
-        awsClient.getAsgs1() flatMap (asgs => awsClient.getLcsForAsgs1(asgs))
+        awsClient.getAsgs1() flatMap awsClient.getLcsForAsgs1
       }.await30s
+    checkAndLog(asgsAndLcs, timed)
 
+    val (asgsAndLcs2: Vector[(Asg, Lc)], timed2: Duration) =
+      TimedFuture {
+        awsClient.getLcsForAsgs2(awsClient.getAsgs2()).toVector
+      }.await30s
+    checkAndLog(asgsAndLcs2, timed2)
+  }
+
+  def checkAndLog(asgsAndLcs: Vector[(Asg, Lc)], timed: Duration): Unit = {
     println(s"timed: ${timed.toHHmmssSSS}")
 
-    val expectedAsgs = AsgClient.makeAsgs(1 to 450)
-    val expectedLcs  = AsgClient.makeLcs( 1 to 450)
+    val expectedAsgs = AsgClient makeAsgs (1 to 450)
+    val expectedLcs  = AsgClient makeLcs  (1 to 450)
 
     if (asgsAndLcs != (expectedAsgs zip expectedLcs)) {
       println(s"asgs and lcs expected don't match actual:")
@@ -83,6 +92,42 @@ final class AwsClient(asgClient: AsgClient) {
           }
       }
       .map(_.flatten.toVector)
+
+  def getAsgs2(req: AsgReq = AsgReq())(implicit ec: EC): AsyncSeq[Asg] =
+    AsyncSeq
+      .unpaginate(getAsgsPage(req))(asgRsp =>
+        asgRsp.nextToken.map(nextToken => getAsgsPage(req.copy(token = Some(nextToken))))
+      )
+      .flatMap(asgRsp => AsyncSeq.fromSeq(asgRsp.asgs))
+
+  def getLcs2(req: LcReq = LcReq())(implicit ec: EC): AsyncSeq[Lc] =
+    AsyncSeq
+      .unpaginate(getLcsPage(req))(lcRsp =>
+        lcRsp.nextToken.map(nextToken => getLcsPage(req.copy(token = Some(nextToken))))
+      )
+      .flatMap(lcRsp => AsyncSeq.fromSeq(lcRsp.lcs))
+
+  def getLcsForAsgs2(asgs: AsyncSeq[Asg])(implicit ec: EC): AsyncSeq[(Asg, Lc)] = {
+    asgs
+      .grouped(50)
+      .map(asgs =>
+        AsyncSeq.fromFuture(
+          getLcs2(LcReq(asgs.map(_.lcName)))
+            .map(lc => lc.name -> lc)
+            .toMap
+            .map { lcs =>
+              asgs flatMap { asg =>
+                lcs get asg.lcName match {
+                  case Some(lc) => Some((asg, lc))
+                  case None     => println(s"Dropping asg with no lc: $asg"); None
+                }
+              }
+            }
+            .map(AsyncSeq.fromSeq)
+        )
+      )
+      .flatten
+  }
 }
 
 final class AsgClient {
