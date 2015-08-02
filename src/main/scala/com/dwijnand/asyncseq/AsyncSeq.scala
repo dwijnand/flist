@@ -400,13 +400,13 @@ object AsyncSeq {
   }
 
   def fromFuture[A](f: Future[AsyncSeq[A]])(implicit ec: EC): AsyncSeq[A] = {
-    def loop(xs: AsyncSeq[A]): AsyncSeq[A] = {
-      xs.promise tryCompleteWith f.flatMap(_.head)
+    def loop(xs: AsyncSeq[A], fut: Future[AsyncSeq[A]]): AsyncSeq[A] = {
+      xs.promise tryCompleteWith fut.flatMap(_.head)
       xs.head onSuccess {
-        case Some(_) => loop(xs.tail)
+        case Some(_) => loop(xs.tail, f.map(_.tail))
       }
       xs
     }
-    loop(new AsyncSeq[A]())
+    loop(new AsyncSeq[A](), f)
   }
 }
