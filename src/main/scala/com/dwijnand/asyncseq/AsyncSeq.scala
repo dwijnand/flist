@@ -105,15 +105,15 @@ final class AsyncSeq[+A] private {
   def indexOfSlice[A1 >: A](ys: AsyncSeq[A1], from: Int) : Future[Int] = ???
 
   // Addition
-  def ++[A1 >: A]( ys: AsyncSeq[A1])     : AsyncSeq[A1] = ???
-  def ++:[A1 >: A](ys: AsyncSeq[A1])     : AsyncSeq[A1] = ???
-  def +:[A1 >: A](elem: A1)              : AsyncSeq[A1] = ??? // prepend
-  def :+[A1 >: A](elem: A1)              : AsyncSeq[A1] = ??? // append
-  def padTo[A1 >: A](len: Int, elem: A1) : AsyncSeq[A1] = ???
+  def ++[A1 >: A]( that: AsyncSeq[A1]) : AsyncSeq[A1] = ???
+  def ++:[A1 >: A](that: AsyncSeq[A1]) : AsyncSeq[A1] = ???
+  def +:[A1 >: A](x: A1)               : AsyncSeq[A1] = ??? // prepend
+  def :+[A1 >: A](x: A1)               : AsyncSeq[A1] = ??? // append
+  def padTo[A1 >: A](len: Int, x: A1)  : AsyncSeq[A1] = ???
 
   // Updates
   def patch[A1 >: A](from: Int, patch: AsyncSeq[A1], replaced: Int): AsyncSeq[A1] = ???
-  def updated[A1 >: A](idx: Int, elem: A1): AsyncSeq[A1] = ???
+  def updated[A1 >: A](idx: Int, x: A1): AsyncSeq[A1] = ???
 
   // Sorting
   def sorted[A1 >: A](implicit ord: Ordering[A1])     : AsyncSeq[A] = ???
@@ -121,15 +121,15 @@ final class AsyncSeq[+A] private {
   def sortBy[B](f: A => B)(implicit ord: Ordering[B]) : AsyncSeq[A] = sorted(ord on f)
 
   // Reversals
-  def reverse: AsyncSeq[A] = ???
+  def reverse: Vector[A]                   = ???
   def reverseIterator: Future[Iterator[A]] = ???
-  def reverseMap[B](f: A => B): AsyncSeq[B] = ???
+  def reverseMap[B](f: A => B): Vector[B]  = ???
 
   // Multiset Operations
-  def intersect[A1 >: A](that: AsyncSeq[A1]): AsyncSeq[A] = ???
-  def diff     [A1 >: A](that: AsyncSeq[A1]): AsyncSeq[A] = ???
+  def intersect[A1 >: A](that: AsyncSeq[A1]): Vector[A] = ???
+  def diff     [A1 >: A](that: AsyncSeq[A1]): Vector[A] = ???
   def union    [A1 >: A](that: AsyncSeq[A1]): AsyncSeq[A1] = this ++ that
-  def distinct: AsyncSeq[A] = ???
+  def distinct: Vector[A] = ???
 
   // Comparisons
   def sameElements[A1 >: A](that: AsyncSeq[A1])(implicit ec: EC): Future[Boolean] = {
@@ -141,12 +141,12 @@ final class AsyncSeq[+A] private {
     }
   }
 
-  def startsWith[B](ys: AsyncSeq[B])                        : Future[Boolean] = ???
-  def startsWith[B](ys: AsyncSeq[B], offset: Int)           : Future[Boolean] = ???
-  def endsWith[B](ys: AsyncSeq[B])                          : Future[Boolean] = ???
-  def contains[A1 >: A](x: A1)(implicit ec: EC)             : Future[Boolean] = exists(_ == x)
-  def containsSlice[B](ys: AsyncSeq[B])                     : Future[Boolean] = ???
-  def corresponds[B](ys: AsyncSeq[B])(p: (A, B) => Boolean) : Future[Boolean] = ???
+  def startsWith[B](that: AsyncSeq[B])                        : Future[Boolean] = ???
+  def startsWith[B](that: AsyncSeq[B], offset: Int)           : Future[Boolean] = ???
+  def endsWith[B](that: AsyncSeq[B])                          : Future[Boolean] = ???
+  def contains[A1 >: A](x: A1)(implicit ec: EC)               : Future[Boolean] = exists(_ == x)
+  def containsSlice[B](that: AsyncSeq[B])                     : Future[Boolean] = ???
+  def corresponds[B](that: AsyncSeq[B])(p: (A, B) => Boolean) : Future[Boolean] = ???
 
   // Maps
   def map[B](f: A => B)(implicit ec: EC): AsyncSeq[B] = {
@@ -167,7 +167,12 @@ final class AsyncSeq[+A] private {
 //def tail                         : AsyncSeq[A] = tail
   def init                         : AsyncSeq[A] = dropRight(1)
   def slice(from: Int, until: Int) : AsyncSeq[A] = ???
-  def drop(n: Int)(implicit ec: EC): AsyncSeq[A] = ???
+
+  def drop(n: Int)(implicit ec: EC): AsyncSeq[A] = {
+    if (n <= 0) this
+    else AsyncSeq fromFuture isEmpty.map(if (_) this else tail drop n - 1)
+  }
+
   def dropRight(n: Int)            : AsyncSeq[A] = ???
   def dropWhile(p: A => Boolean)   : AsyncSeq[A] = ???
   def take(n: Int)                 : AsyncSeq[A] = ???
