@@ -341,11 +341,6 @@ object AsyncSeq {
 
   def empty[A]: AsyncSeq[A] = Empty
 
-  object Empty extends AsyncSeq[Nothing] {
-    def head = Future successful None
-    def tail = Empty
-  }
-
   def apply[A](as: A*): AsyncSeq[A] = {
     if (as.isEmpty) ???
     else ???
@@ -377,6 +372,11 @@ object AsyncSeq {
 
   def fromFuture[A](f: Future[AsyncSeq[A]])(implicit ec: EC): AsyncSeq[A] = new FromFuture[A](f)
 
+  object Empty extends AsyncSeq[Nothing] {
+    def head = Future successful None
+    def tail = Empty
+  }
+
   final class Seed[A] private[AsyncSeq] (fetch: A => Option[Future[A]])(implicit ec: EC) extends AsyncSeq[A] {
     private[AsyncSeq] val promise = Promise[Option[A]]()
 
@@ -384,7 +384,7 @@ object AsyncSeq {
 
     lazy val tail = new Seed(fetch)
 
-    head.onSuccess {
+    head onSuccess {
       case Some(result) =>
         fetch(result) match {
           case Some(nextResult) => tail.promise tryCompleteWith nextResult.map(Some(_))
@@ -400,7 +400,7 @@ object AsyncSeq {
 
     lazy val tail = new Mapped(xs.tail, f)
 
-    head.onSuccess {
+    head onSuccess {
       case Some(_) => tail.promise tryCompleteWith xs.tail.head.map(_ map f)
     }
   }
@@ -424,7 +424,7 @@ object AsyncSeq {
 
     promise tryCompleteWith f.flatMap(_.head)
     head onSuccess {
-      case Some(result) => tail
+      case Some(result) => tail // trigger tail to get initialised
     }
   }
 }
