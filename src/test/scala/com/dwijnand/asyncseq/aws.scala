@@ -1,19 +1,19 @@
 package com.dwijnand.asyncseq
 
 import scala.concurrent.duration._
-import scala.concurrent.{ ExecutionContext, Future }
+import scala.concurrent.{ ExecutionContext => EC, Future }
 
 
-final case class Asg(name: String, launchConfigName: String)
+final case class Asg(name: String, lcName: String)
 
 final case class AsgReq(token: Option[Int] = None)
-final case class AsgRes(asgs: Vector[Asg], nextToken: Option[Int])
+final case class AsgRsp(asgs: Vector[Asg], nextToken: Option[Int])
 
 
-final case class LaunchConfig(name: String)
+final case class Lc(name: String)
 
-final case class LaunchConfigReq(launchConfigNames: Vector[String] = Vector.empty, token: Option[Int] = None)
-final case class LaunchConfigRes(launchConfigs: Vector[LaunchConfig], nextToken: Option[Int])
+final case class LcReq(lcNames: Vector[String] = Vector.empty, token: Option[Int] = None)
+final case class LcRsp(lcs: Vector[Lc], nextToken: Option[Int])
 
 
 object Main {
@@ -23,40 +23,32 @@ object Main {
     val asgClient = new AsgClient
     val awsClient = new AwsClient(asgClient)
 
-    val (asgsAndLaunchConfigs: Vector[(Asg, LaunchConfig)], timed: Duration) =
+    val (asgsAndLcs: Vector[(Asg, Lc)], timed: Duration) =
       TimedFuture {
-        awsClient.getAsgs1() flatMap (asgs => awsClient.getLaunchConfigsForAsgs1(asgs))
+        awsClient.getAsgs1() flatMap (asgs => awsClient.getLcsForAsgs1(asgs))
       }.await30s
 
     println(s"timed: ${timed.toHHmmssSSS}")
 
-    val expectedAsgs          = AsgClient.makeAsgs(1 to 450)
-    val expectedLaunchConfigs = AsgClient.makeLaunchConfigs(1 to 450)
+    val expectedAsgs = AsgClient.makeAsgs(1 to 450)
+    val expectedLcs  = AsgClient.makeLcs( 1 to 450)
 
-    if (asgsAndLaunchConfigs != (expectedAsgs zip expectedLaunchConfigs)) {
-      println(s"Fail")
-      println(s"asgs and launch configs:")
-      asgsAndLaunchConfigs foreach { case (asg, launchConfig) =>
-        println(s"asg: $asg  launch config: $launchConfig")
-      }
+    if (asgsAndLcs != (expectedAsgs zip expectedLcs)) {
+      println(s"asgs and lcs expected don't match actual:")
+      asgsAndLcs foreach { case (asg, lc) => println(s"asg: $asg  lc: $lc") }
     }
   }
 }
 
 final class AwsClient(asgClient: AsgClient) {
-  def getAsgsPage(req: AsgReq = AsgReq())(implicit ec: ExecutionContext)
-  : Future[AsgRes] =
-    asgClient describeAsgsAsync req
+  def getAsgsPage(req: AsgReq = AsgReq())(implicit ec: EC): Future[AsgRsp] = asgClient describeAsgs req
+  def getLcsPage( req: LcReq  = LcReq()) (implicit ec: EC): Future[LcRsp]  = asgClient describeLcs req
 
-  def getLaunchConfigsPage(req: LaunchConfigReq = LaunchConfigReq())(implicit ec: ExecutionContext)
-  : Future[LaunchConfigRes] =
-    asgClient describeLaunchConfigs req
-
-  def getAsgs1(req: AsgReq = AsgReq())(implicit ec: ExecutionContext) = {
+  def getAsgs1(req: AsgReq = AsgReq())(implicit ec: EC): Future[Vector[Asg]] = {
     def loop(req: AsgReq, asgs: Vector[Asg]): Future[Vector[Asg]] =
-      getAsgsPage(req).flatMap { res =>
-        val allAsgs = asgs ++ res.asgs
-        res.nextToken match {
+      getAsgsPage(req) flatMap { rsp =>
+        val allAsgs = asgs ++ rsp.asgs
+        rsp.nextToken match {
           case None      => Future successful allAsgs
           case nextToken => loop(req.copy(token = nextToken), allAsgs)
         }
@@ -64,30 +56,28 @@ final class AwsClient(asgClient: AsgClient) {
     loop(req, Vector.empty)
   }
 
-  def getLaunchConfigs1(req: LaunchConfigReq = LaunchConfigReq())(implicit ec: ExecutionContext)
-  : Future[Vector[LaunchConfig]] = {
-    def loop(req: LaunchConfigReq, launchConfigs: Vector[LaunchConfig]): Future[Vector[LaunchConfig]] =
-      getLaunchConfigsPage(req).flatMap { res =>
-        val allLaunchConfigs = launchConfigs ++ res.launchConfigs
-        res.nextToken match {
-          case None      => Future successful allLaunchConfigs
-          case nextToken => loop(req.copy(token = nextToken), allLaunchConfigs)
+  def getLcs1(req: LcReq = LcReq())(implicit ec: EC): Future[Vector[Lc]] = {
+    def loop(req: LcReq, lcs: Vector[Lc]): Future[Vector[Lc]] =
+      getLcsPage(req) flatMap { rsp =>
+        val allLcs = lcs ++ rsp.lcs
+        rsp.nextToken match {
+          case None      => Future successful allLcs
+          case nextToken => loop(req.copy(token = nextToken), allLcs)
         }
       }
     loop(req, Vector.empty)
   }
 
-  def getLaunchConfigsForAsgs1(asgs: Vector[Asg])(implicit ec: ExecutionContext)
-  : Future[Vector[(Asg, LaunchConfig)]] =
+  def getLcsForAsgs1(asgs: Vector[Asg])(implicit ec: EC): Future[Vector[(Asg, Lc)]] =
     Future
       .traverse(asgs grouped 50) { asgs =>
-        getLaunchConfigs1(LaunchConfigReq(asgs.map(_.launchConfigName)))
-          .map(_.map(launchConfig => launchConfig.name -> launchConfig).toMap)
-          .map { launchConfigs =>
+        getLcs1(LcReq(asgs.map(_.lcName)))
+          .map(_.map(lc => lc.name -> lc).toMap)
+          .map { lcs =>
             asgs flatMap { asg =>
-              launchConfigs.get(asg.launchConfigName) match {
-                case Some(launchConfig) => Some((asg, launchConfig))
-                case None               => println(s"Dropping asg with no launch config: $asg"); None
+              lcs get asg.lcName match {
+                case Some(lc) => Some((asg, lc))
+                case None     => println(s"Dropping asg with no lc: $asg"); None
               }
             }
           }
@@ -98,45 +88,45 @@ final class AwsClient(asgClient: AsgClient) {
 final class AsgClient {
   import AsgClient._
 
-  def describeAsgsAsync(req: AsgReq)(implicit ec: ExecutionContext): Future[AsgRes] =
+  def describeAsgs(req: AsgReq)(implicit ec: EC): Future[AsgRsp] =
     Future {
       Thread sleep 10
       req.token match {
-        case None    => asgRes(  1 to  50, Some(2))
-        case Some(2) => asgRes( 51 to 100, Some(3))
-        case Some(3) => asgRes(101 to 150, Some(4))
-        case Some(4) => asgRes(151 to 200, Some(5))
-        case Some(5) => asgRes(201 to 250, Some(6))
-        case Some(6) => asgRes(251 to 300, Some(7))
-        case Some(7) => asgRes(301 to 350, Some(8))
-        case Some(8) => asgRes(351 to 400, Some(9))
-        case Some(9) => asgRes(401 to 450, None)
+        case None    => asgRsp(  1 to  50, Some(2))
+        case Some(2) => asgRsp( 51 to 100, Some(3))
+        case Some(3) => asgRsp(101 to 150, Some(4))
+        case Some(4) => asgRsp(151 to 200, Some(5))
+        case Some(5) => asgRsp(201 to 250, Some(6))
+        case Some(6) => asgRsp(251 to 300, Some(7))
+        case Some(7) => asgRsp(301 to 350, Some(8))
+        case Some(8) => asgRsp(351 to 400, Some(9))
+        case Some(9) => asgRsp(401 to 450, None)
         case x       => sys error s"Unknown input $x"
       }
     }
 
-  def describeLaunchConfigs(req: LaunchConfigReq)(implicit ec: ExecutionContext): Future[LaunchConfigRes] =
+  def describeLcs(req: LcReq)(implicit ec: EC): Future[LcRsp] =
     Future {
       Thread sleep 100
-      (req.launchConfigNames, req.token) match {
-        case (`lcns1`, None)    => launchConfigRes(  1 to  25, Some(2))
-        case (`lcns1`, Some(2)) => launchConfigRes( 26 to  50, None)
-        case (`lcns2`, None)    => launchConfigRes( 51 to  75, Some(2))
-        case (`lcns2`, Some(2)) => launchConfigRes( 76 to 100, None)
-        case (`lcns3`, None)    => launchConfigRes(101 to 125, Some(2))
-        case (`lcns3`, Some(2)) => launchConfigRes(126 to 150, None)
-        case (`lcns4`, None)    => launchConfigRes(151 to 175, Some(2))
-        case (`lcns4`, Some(2)) => launchConfigRes(176 to 200, None)
-        case (`lcns5`, None)    => launchConfigRes(201 to 225, Some(2))
-        case (`lcns5`, Some(2)) => launchConfigRes(226 to 250, None)
-        case (`lcns6`, None)    => launchConfigRes(251 to 275, Some(2))
-        case (`lcns6`, Some(2)) => launchConfigRes(276 to 300, None)
-        case (`lcns7`, None)    => launchConfigRes(301 to 325, Some(2))
-        case (`lcns7`, Some(2)) => launchConfigRes(326 to 350, None)
-        case (`lcns8`, None)    => launchConfigRes(351 to 375, Some(2))
-        case (`lcns8`, Some(2)) => launchConfigRes(376 to 400, None)
-        case (`lcns9`, None)    => launchConfigRes(401 to 425, Some(2))
-        case (`lcns9`, Some(2)) => launchConfigRes(426 to 450, None)
+      (req.lcNames, req.token) match {
+        case (`lcns1`, None)    => lcRsp(  1 to  25, Some(2))
+        case (`lcns1`, Some(2)) => lcRsp( 26 to  50, None)
+        case (`lcns2`, None)    => lcRsp( 51 to  75, Some(2))
+        case (`lcns2`, Some(2)) => lcRsp( 76 to 100, None)
+        case (`lcns3`, None)    => lcRsp(101 to 125, Some(2))
+        case (`lcns3`, Some(2)) => lcRsp(126 to 150, None)
+        case (`lcns4`, None)    => lcRsp(151 to 175, Some(2))
+        case (`lcns4`, Some(2)) => lcRsp(176 to 200, None)
+        case (`lcns5`, None)    => lcRsp(201 to 225, Some(2))
+        case (`lcns5`, Some(2)) => lcRsp(226 to 250, None)
+        case (`lcns6`, None)    => lcRsp(251 to 275, Some(2))
+        case (`lcns6`, Some(2)) => lcRsp(276 to 300, None)
+        case (`lcns7`, None)    => lcRsp(301 to 325, Some(2))
+        case (`lcns7`, Some(2)) => lcRsp(326 to 350, None)
+        case (`lcns8`, None)    => lcRsp(351 to 375, Some(2))
+        case (`lcns8`, Some(2)) => lcRsp(376 to 400, None)
+        case (`lcns9`, None)    => lcRsp(401 to 425, Some(2))
+        case (`lcns9`, Some(2)) => lcRsp(426 to 450, None)
         case x                  => sys error s"Unknown input $x"
       }
     }
@@ -144,20 +134,20 @@ final class AsgClient {
 
 object AsgClient {
   def makeAsgs(          r: Range) = r.toVector.map(n => Asg(f"$n%03d", f"lc$n%03d"))
-  def makeLaunchConfigs( r: Range) = r.toVector.map(n => LaunchConfig(f"lc$n%03d"))
+  def makeLcs( r: Range) = r.toVector.map(n => Lc(f"lc$n%03d"))
 
-  def asgRes(          r: Range, nextToken: Option[Int]) = AsgRes(         makeAsgs(r),          nextToken)
-  def launchConfigRes( r: Range, nextToken: Option[Int]) = LaunchConfigRes(makeLaunchConfigs(r), nextToken)
+  def asgRsp(r: Range, nextToken: Option[Int]) = AsgRsp(makeAsgs(r), nextToken)
+  def lcRsp( r: Range, nextToken: Option[Int]) = LcRsp( makeLcs(r),  nextToken)
 
-  def launchConfigNames(r: Range) = r.toVector.map(n => f"lc$n%03d")
+  def lcNames(r: Range) = r.toVector.map(n => f"lc$n%03d")
 
-  val lcns1 = launchConfigNames(  1 to 50)
-  val lcns2 = launchConfigNames( 51 to 100)
-  val lcns3 = launchConfigNames(101 to 150)
-  val lcns4 = launchConfigNames(151 to 200)
-  val lcns5 = launchConfigNames(201 to 250)
-  val lcns6 = launchConfigNames(251 to 300)
-  val lcns7 = launchConfigNames(301 to 350)
-  val lcns8 = launchConfigNames(351 to 400)
-  val lcns9 = launchConfigNames(401 to 450)
+  val lcns1 = lcNames(  1 to 50)
+  val lcns2 = lcNames( 51 to 100)
+  val lcns3 = lcNames(101 to 150)
+  val lcns4 = lcNames(151 to 200)
+  val lcns5 = lcNames(201 to 250)
+  val lcns6 = lcNames(251 to 300)
+  val lcns7 = lcNames(301 to 350)
+  val lcns8 = lcNames(351 to 400)
+  val lcns9 = lcNames(401 to 450)
 }
