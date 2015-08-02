@@ -31,8 +31,8 @@ object AsyncSeq {
 
     def isEmpty (implicit ec: EC): Future[Boolean] = xs.head.map(_.isEmpty)
     def nonEmpty(implicit ec: EC): Future[Boolean] = xs.head.map(_.nonEmpty)
-    def size    (implicit ec: EC): Future[Int]     = count(_ => true)
-    def length  (implicit ec: EC): Future[Int]     = size
+    def size    (implicit ec: EC): Future[Int]     = foldLeft(0)((c, _) => c + 1)
+    def length  (implicit ec: EC): Future[Int]     = foldLeft(0)((c, _) => c + 1)
 
     def foreach[U](f: A => U)(implicit ec: EC): Future[Unit] =
       xs.head flatMap {
