@@ -178,7 +178,7 @@ final class AsgClient {
 }
 
 object AsgClient {
-  def makeAsgs(          r: Range) = r.toVector.map(n => Asg(f"$n%03d", f"lc$n%03d"))
+  def makeAsgs(r: Range) = r.toVector.map(n => Asg(f"$n%03d", f"lc$n%03d"))
   def makeLcs( r: Range) = r.toVector.map(n => Lc(f"lc$n%03d"))
 
   def asgRsp(r: Range, nextToken: Option[Int]) = AsgRsp(makeAsgs(r), nextToken)

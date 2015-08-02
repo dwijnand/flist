@@ -107,8 +107,22 @@ final class AsyncSeq[+A] private {
   // Addition
   def ++[A1 >: A]( that: AsyncSeq[A1]) : AsyncSeq[A1] = ???
   def ++:[A1 >: A](that: AsyncSeq[A1]) : AsyncSeq[A1] = ???
-  def +:[A1 >: A](x: A1)               : AsyncSeq[A1] = ??? // prepend
+
+  // TODO: Hmm if AsyncSeq were a sealed trait, this would just be a cons with a cast.
+  def +:[A1 >: A](x: A1)(implicit ec: EC): AsyncSeq[A1] = {
+    def loop(x: A1, xs: AsyncSeq[A1], xs0: AsyncSeq[A]): AsyncSeq[A1] = {
+      xs.promise success Some(x)
+      xs0.head onComplete {
+        case Success(Some(x)) => loop(x, xs.tail, xs0.tail)
+        case t                => xs.tail.promise complete t
+      }
+      xs
+    }
+    loop(x, new AsyncSeq[A1], this)
+  }
+
   def :+[A1 >: A](x: A1)               : AsyncSeq[A1] = ??? // append
+
   def padTo[A1 >: A](len: Int, x: A1)  : AsyncSeq[A1] = ???
 
   // Updates
@@ -121,15 +135,16 @@ final class AsyncSeq[+A] private {
   def sortBy[B](f: A => B)(implicit ord: Ordering[B]) : AsyncSeq[A] = sorted(ord on f)
 
   // Reversals
-  def reverse: Vector[A]                   = ???
-  def reverseIterator: Future[Iterator[A]] = ???
-  def reverseMap[B](f: A => B): Vector[B]  = ???
+  def reverse: AsyncSeq[A]                  = ???
+  def reverseIterator: Future[Iterator[A]]  = ???
+  def reverseMap[B](f: A => B): AsyncSeq[B] = ???
 
   // Multiset Operations
-  def intersect[A1 >: A](that: AsyncSeq[A1]): Vector[A] = ???
-  def diff     [A1 >: A](that: AsyncSeq[A1]): Vector[A] = ???
-  def union    [A1 >: A](that: AsyncSeq[A1]): AsyncSeq[A1] = this ++ that
-  def distinct: Vector[A] = ???
+  def union[A1 >: A](that: AsyncSeq[A1]): AsyncSeq[A1] = this ++ that
+
+  def intersect[A1 >: A](that: AsyncSeq[A1]): AsyncSeq[A] = ???
+  def diff     [A1 >: A](that: AsyncSeq[A1]): AsyncSeq[A] = ???
+  def distinct                              : AsyncSeq[A] = ???
 
   // Comparisons
   def sameElements[A1 >: A](that: AsyncSeq[A1])(implicit ec: EC): Future[Boolean] = {
