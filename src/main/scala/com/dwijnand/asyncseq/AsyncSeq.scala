@@ -243,29 +243,20 @@ object AsyncSeq {
     def max[A1 >: A](implicit ord: Ordering[A1], ec: EC): Future[Option[A]] =
       reduceLeft((x, y) => if (ord.gteq(x, y)) x else y)
 
-    def minBy[B](f: A => B)(implicit ord: Ordering[B], ec: EC): Future[Option[A]] = {
+    private def reduceBy[B](f: A => B)(p: (B, B) => Boolean)(implicit ec: EC): Future[Option[A]] = {
       xs.head flatMap {
         case Some(x) =>
           foldLeft((x, f(x))) { case ((x, fx), y) =>
             val fy = f(y)
-            if (ord.lt(fx, fy)) (x, fx) else (y, fy)
+            if (p(fx, fy)) (x, fx) else (y, fy)
           }
           .map(t => Some(t._1))
         case None    => xs.head
       }
     }
 
-    def maxBy[B](f: A => B)(implicit ord: Ordering[B], ec: EC): Future[Option[A]] = {
-      xs.head flatMap {
-        case Some(x) =>
-          foldLeft((x, f(x))) { case ((x, fx), y) =>
-            val fy = f(y)
-            if (ord.gt(fx, fy)) (x, fx) else (y, fy)
-          }
-          .map(t => Some(t._1))
-        case None    => xs.head
-      }
-    }
+    def minBy[B](f: A => B)(implicit ord: Ordering[B], ec: EC): Future[Option[A]] = reduceBy(f)(ord.lt)
+    def maxBy[B](f: A => B)(implicit ord: Ordering[B], ec: EC): Future[Option[A]] = reduceBy(f)(ord.gt)
 
     def scan[B >: A](z: B)(op: (B, B) => B): AsyncSeq[B] = ???
     def scanLeft[B]( z: B)(op: (B, A) => B): AsyncSeq[B] = ???
