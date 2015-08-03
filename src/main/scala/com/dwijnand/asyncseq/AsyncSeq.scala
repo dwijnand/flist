@@ -168,7 +168,22 @@ final class AsyncSeq[+A] private {
     loop(new AsyncSeq[A1], this)
   }
 
-  def padTo[A1 >: A](len: Int, x: A1)  : AsyncSeq[A1] = ???
+  def padTo[A1 >: A](len: Int, x: A1)(implicit ec: EC): AsyncSeq[A1] = {
+    def loop1(xs: AsyncSeq[A1], xs0: AsyncSeq[A], n: Int): AsyncSeq[A1] = {
+      xs0.head onComplete {
+        case Success(Some(x)) => xs.promise success Some(x) ; loop1(xs.tail, xs0.tail, n - 1)
+        case Success(None)    => loop2(xs, n)
+        case f                => xs.promise complete f
+      }
+      xs
+    }
+    def loop2(xs: AsyncSeq[A1], n: Int): Unit =
+      if (n > 0) {
+        xs.promise success Some(x) ; loop2(xs.tail, n - 1)
+      } else
+        xs.promise success None
+    loop1(new AsyncSeq[A1], this, len)
+  }
 
   // Updates
   def patch[A1 >: A](from: Int, patch: AsyncSeq[A1], replaced: Int): AsyncSeq[A1] = ???
