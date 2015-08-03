@@ -1,7 +1,7 @@
 package com.dwijnand.asyncseq
 
 import scala.concurrent.duration._
-import scala.concurrent.{ ExecutionContext => EC, Future }
+import scala.concurrent.{ blocking, ExecutionContext => EC, Future }
 
 
 final case class Asg(name: String, lcName: String)
@@ -139,44 +139,48 @@ final class AsgClient {
 
   def describeAsgs(req: AsgReq)(implicit ec: EC): Future[AsgRsp] =
     Future {
-      Thread sleep 300
-      req.token match {
-        case None    => asgRsp(  1 to  50, Some(2))
-        case Some(2) => asgRsp( 51 to 100, Some(3))
-        case Some(3) => asgRsp(101 to 150, Some(4))
-        case Some(4) => asgRsp(151 to 200, Some(5))
-        case Some(5) => asgRsp(201 to 250, Some(6))
-        case Some(6) => asgRsp(251 to 300, Some(7))
-        case Some(7) => asgRsp(301 to 350, Some(8))
-        case Some(8) => asgRsp(351 to 400, Some(9))
-        case Some(9) => asgRsp(401 to 450, None)
-        case x       => sys error s"Unknown input $x"
+      blocking {
+        Thread sleep 300
+        req.token match {
+          case None    => asgRsp(  1 to  50, Some(2))
+          case Some(2) => asgRsp( 51 to 100, Some(3))
+          case Some(3) => asgRsp(101 to 150, Some(4))
+          case Some(4) => asgRsp(151 to 200, Some(5))
+          case Some(5) => asgRsp(201 to 250, Some(6))
+          case Some(6) => asgRsp(251 to 300, Some(7))
+          case Some(7) => asgRsp(301 to 350, Some(8))
+          case Some(8) => asgRsp(351 to 400, Some(9))
+          case Some(9) => asgRsp(401 to 450, None)
+          case x       => sys error s"Unknown input $x"
+        }
       }
     }
 
   def describeLcs(req: LcReq)(implicit ec: EC): Future[LcRsp] =
     Future {
-      Thread sleep 300
-      (req.lcNames, req.token) match {
-        case (`lcns1`, None)    => lcRsp(  1 to  25, Some(2))
-        case (`lcns1`, Some(2)) => lcRsp( 26 to  50, None)
-        case (`lcns2`, None)    => lcRsp( 51 to  75, Some(2))
-        case (`lcns2`, Some(2)) => lcRsp( 76 to 100, None)
-        case (`lcns3`, None)    => lcRsp(101 to 125, Some(2))
-        case (`lcns3`, Some(2)) => lcRsp(126 to 150, None)
-        case (`lcns4`, None)    => lcRsp(151 to 175, Some(2))
-        case (`lcns4`, Some(2)) => lcRsp(176 to 200, None)
-        case (`lcns5`, None)    => lcRsp(201 to 225, Some(2))
-        case (`lcns5`, Some(2)) => lcRsp(226 to 250, None)
-        case (`lcns6`, None)    => lcRsp(251 to 275, Some(2))
-        case (`lcns6`, Some(2)) => lcRsp(276 to 300, None)
-        case (`lcns7`, None)    => lcRsp(301 to 325, Some(2))
-        case (`lcns7`, Some(2)) => lcRsp(326 to 350, None)
-        case (`lcns8`, None)    => lcRsp(351 to 375, Some(2))
-        case (`lcns8`, Some(2)) => lcRsp(376 to 400, None)
-        case (`lcns9`, None)    => lcRsp(401 to 425, Some(2))
-        case (`lcns9`, Some(2)) => lcRsp(426 to 450, None)
-        case x                  => sys error s"Unknown input $x"
+      blocking {
+        Thread sleep 300
+        (req.lcNames, req.token) match {
+          case (`lcns1`, None)    => lcRsp(  1 to  25, Some(2))
+          case (`lcns1`, Some(2)) => lcRsp( 26 to  50, None)
+          case (`lcns2`, None)    => lcRsp( 51 to  75, Some(2))
+          case (`lcns2`, Some(2)) => lcRsp( 76 to 100, None)
+          case (`lcns3`, None)    => lcRsp(101 to 125, Some(2))
+          case (`lcns3`, Some(2)) => lcRsp(126 to 150, None)
+          case (`lcns4`, None)    => lcRsp(151 to 175, Some(2))
+          case (`lcns4`, Some(2)) => lcRsp(176 to 200, None)
+          case (`lcns5`, None)    => lcRsp(201 to 225, Some(2))
+          case (`lcns5`, Some(2)) => lcRsp(226 to 250, None)
+          case (`lcns6`, None)    => lcRsp(251 to 275, Some(2))
+          case (`lcns6`, Some(2)) => lcRsp(276 to 300, None)
+          case (`lcns7`, None)    => lcRsp(301 to 325, Some(2))
+          case (`lcns7`, Some(2)) => lcRsp(326 to 350, None)
+          case (`lcns8`, None)    => lcRsp(351 to 375, Some(2))
+          case (`lcns8`, Some(2)) => lcRsp(376 to 400, None)
+          case (`lcns9`, None)    => lcRsp(401 to 425, Some(2))
+          case (`lcns9`, Some(2)) => lcRsp(426 to 450, None)
+          case x                  => sys error s"Unknown input $x"
+        }
       }
     }
 }
