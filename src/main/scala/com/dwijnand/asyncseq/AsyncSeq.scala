@@ -399,7 +399,7 @@ final class AsyncSeq[+A] private (private[AsyncSeq] val promise: Promise[Option[
   }
 
   // Copying
-  def copyToBuffer[B >: A](xs: mutable.Buffer[B])(implicit ec: EC): Future[Unit] = toVector.map(xs ++= _)
+  def copyToBuffer[B >: A](xs: mutable.Buffer[B])(implicit ec: EC): Future[Unit] = toList.map(xs ++= _)
 
   def copyToArray[B >: A](arr: Array[B])                      (implicit ec: EC): Future[Unit] = copyToArray(arr, 0, arr.length)
   def copyToArray[B >: A](arr: Array[B], start: Int)          (implicit ec: EC): Future[Unit] = copyToArray(arr, start, arr.length - start)
@@ -434,7 +434,7 @@ final class AsyncSeq[+A] private (private[AsyncSeq] val promise: Promise[Option[
   def toMap[K, V](implicit ec: EC, ev: A <:< (K, V)): Future[Map[K, V]] =
     foldLeft(Map.newBuilder[K, V])(_ += _).map(_.result)
 
-  def toIterator   (implicit ec: EC): Future[Iterator[A]]    = toVector.map(_.iterator)
+  def toIterator   (implicit ec: EC): Future[Iterator[A]]    = toList.map(_.iterator)
   def toIndexedSeq (implicit ec: EC): Future[IndexedSeq[A]]  = toVector
   def toSeq        (implicit ec: EC): Future[Seq[A]]         = toIndexedSeq
   def toIterable   (implicit ec: EC): Future[Iterable[A]]    = toSeq
