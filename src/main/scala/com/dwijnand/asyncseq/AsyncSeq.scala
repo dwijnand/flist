@@ -10,12 +10,12 @@ import scala.reflect.ClassTag
 import scala.util.{ Failure, Success }
 import scala.{ PartialFunction => ?=> }
 
-final class AsyncSeq[+A] private {
-  private[AsyncSeq] val promise: Promise[Option[A @uV]] = Promise[Option[A]]()
+final class AsyncSeq[+A] private (private[AsyncSeq] val promise: Promise[Option[A @uV]], tl: => AsyncSeq[A]) {
+  def this() = this(Promise[Option[A]](), new AsyncSeq[A])
 
   val head: Future[Option[A]] = promise.future
 
-  lazy val tail: AsyncSeq[A] = new AsyncSeq[A]
+  lazy val tail: AsyncSeq[A] = tl
 
   // Size info
   @tailrec def hasDefiniteSize: Boolean =
@@ -143,18 +143,8 @@ final class AsyncSeq[+A] private {
     loopThat(new AsyncSeq[A1], that)
   }
 
-  // TODO: Hmm if AsyncSeq were a sealed trait, this would just be a cons with a cast.
-  def +:[A1 >: A](x: A1)(implicit ec: EC): AsyncSeq[A1] = {
-    def loop(x: A1, xs: AsyncSeq[A1], xs0: AsyncSeq[A]): AsyncSeq[A1] = {
-      xs.promise success Some(x)
-      xs0.head onComplete {
-        case Success(Some(x)) => loop(x, xs.tail, xs0.tail)
-        case f                => xs.tail.promise complete f
-      }
-      xs
-    }
-    loop(x, new AsyncSeq[A1], this)
-  }
+  def +:[A1 >: A](x: A1)(implicit ec: EC): AsyncSeq[A1] =
+    new AsyncSeq[A1](Promise[Option[A1]] success Some(x), this)
 
   def :+[A1 >: A](x: A1)(implicit ec: EC): AsyncSeq[A1] = {
     def loop(xs: AsyncSeq[A1], xs0: AsyncSeq[A]): AsyncSeq[A1] = {
