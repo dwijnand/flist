@@ -45,6 +45,9 @@ scalacOptions in (Test,    console) -= "-Ywarn-unused-import"
   wartremoverWarnings += Wart.TryPartial
   wartremoverWarnings += Wart.Var
 
+initialCommands in console += "\nimport com.dwijnand.asyncseq._"
+initialCommands in console += "\nimport scala.concurrent.ExecutionContext.Implicits.global"
+
 parallelExecution in Test := true
 fork in Test := false
 
