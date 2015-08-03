@@ -105,7 +105,25 @@ final class AsyncSeq[+A] private {
   def indexOfSlice[A1 >: A](ys: AsyncSeq[A1], from: Int) : Future[Int] = ???
 
   // Addition
-  def ++[A1 >: A]( that: AsyncSeq[A1]) : AsyncSeq[A1] = ???
+  def ++[A1 >: A](that: AsyncSeq[A1])(implicit ec: EC): AsyncSeq[A1] = {
+    def loopThis(xs: AsyncSeq[A1], xs0: AsyncSeq[A]): AsyncSeq[A1] = {
+      xs0.head onComplete {
+        case Success(Some(x)) => xs.promise success Some(x) ; loopThis(xs.tail, xs0.tail)
+        case Success(None)    => loopThat(xs, that)
+        case f                => xs.promise tryComplete f
+      }
+      xs
+    }
+    def loopThat(xs: AsyncSeq[A1], xs0: AsyncSeq[A1]): Unit = {
+      xs0.head onComplete {
+        case Success(Some(x)) => xs.promise success Some(x) ; loopThat(xs.tail, xs0.tail)
+        case Success(None)    => xs.promise success None
+        case f                => xs.promise tryComplete f
+      }
+    }
+    loopThis(new AsyncSeq[A1], this)
+  }
+
   def ++:[A1 >: A](that: AsyncSeq[A1]) : AsyncSeq[A1] = ???
 
   // TODO: Hmm if AsyncSeq were a sealed trait, this would just be a cons with a cast.
@@ -140,7 +158,7 @@ final class AsyncSeq[+A] private {
   def reverseMap[B](f: A => B): AsyncSeq[B] = ???
 
   // Multiset Operations
-  def union[A1 >: A](that: AsyncSeq[A1]): AsyncSeq[A1] = this ++ that
+  def union[A1 >: A](that: AsyncSeq[A1])(implicit ec: EC): AsyncSeq[A1] = this ++ that
 
   def intersect[A1 >: A](that: AsyncSeq[A1]): AsyncSeq[A] = ???
   def diff     [A1 >: A](that: AsyncSeq[A1]): AsyncSeq[A] = ???
