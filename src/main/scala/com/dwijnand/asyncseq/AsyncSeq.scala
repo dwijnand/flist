@@ -4,7 +4,7 @@ import scala.annotation.tailrec
 import scala.annotation.unchecked.{ uncheckedVariance => uV }
 import scala.collection.generic.{ CanBuildFrom => CBF }
 import scala.collection.immutable.IndexedSeq
-import scala.collection.mutable
+import scala.collection.{ GenTraversable, mutable }
 import scala.concurrent.{ ExecutionContext => EC, Future, Promise }
 import scala.reflect.ClassTag
 import scala.util.{ Failure, Success }
@@ -518,6 +518,8 @@ object AsyncSeq {
 
   def newBuilder[A]: mutable.Builder[A, AsyncSeq[A]] = new AsyncSeqBuilder[A]
 
+  implicit def canBuildFrom[A] = new AsyncSeqCanBuildFrom[A]
+
   final class AsyncSeqBuilder[A] extends mutable.Builder[A, AsyncSeq[A]] {
     private[this] var head: AsyncSeq[A] = _
     private[this] var next: AsyncSeq[A] = _
@@ -540,5 +542,10 @@ object AsyncSeq {
       clear
       res
     }
+  }
+
+  final class AsyncSeqCanBuildFrom[A] extends CBF[GenTraversable[_], A, AsyncSeq[A]] {
+    def apply(from: GenTraversable[_]) = newBuilder
+    def apply()                        = newBuilder
   }
 }
