@@ -139,7 +139,7 @@ final class AsgClient {
 
   def describeAsgs(req: AsgReq)(implicit ec: EC): Future[AsgRsp] =
     Future {
-      Thread sleep 10
+      Thread sleep 300
       req.token match {
         case None    => asgRsp(  1 to  50, Some(2))
         case Some(2) => asgRsp( 51 to 100, Some(3))
@@ -156,7 +156,7 @@ final class AsgClient {
 
   def describeLcs(req: LcReq)(implicit ec: EC): Future[LcRsp] =
     Future {
-      Thread sleep 100
+      Thread sleep 300
       (req.lcNames, req.token) match {
         case (`lcns1`, None)    => lcRsp(  1 to  25, Some(2))
         case (`lcns1`, Some(2)) => lcRsp( 26 to  50, None)
