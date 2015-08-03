@@ -530,7 +530,7 @@ object AsyncSeq {
     def loop(xs: AsyncSeq[A], fut: Future[AsyncSeq[A]]): AsyncSeq[A] = {
       xs.promise tryCompleteWith fut.flatMap(_.head)
       xs.head onSuccess {
-        case Some(_) => loop(xs.tail, f.map(_.tail))
+        case Some(_) => loop(xs.tail, fut.map(_.tail))
       }
       xs
     }
