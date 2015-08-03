@@ -209,21 +209,25 @@ final class AsyncSeq[+A] private {
 
   // Other iterators
   def grouped(size: Int)(implicit ec: EC): AsyncSeq[AsyncSeq[A]] = {
-    def loop(xs0: AsyncSeq[A], xs: AsyncSeq[A], n: Int, grouped: AsyncSeq[AsyncSeq[A]]): Unit = {
+    def loop0(xs0: AsyncSeq[A], grouped: AsyncSeq[AsyncSeq[A]]): AsyncSeq[AsyncSeq[A]] = {
+      val xs = new AsyncSeq[A]
+      loop(xs0, xs, xs, size, grouped)
+    }
+    def loop(xs0: AsyncSeq[A], xs: AsyncSeq[A], wip: AsyncSeq[A], n: Int, grouped: AsyncSeq[AsyncSeq[A]])
+    : AsyncSeq[AsyncSeq[A]] = {
       if (n > 0) {
         xs0.head onComplete {
-          case Success(Some(x)) => xs.promise success Some(x); loop(xs0.tail, xs.tail, n - 1, grouped)
-          case t                => xs.promise complete t; grouped.promise success Some(xs)
+          case Success(Some(x)) => wip.promise success Some(x) ; loop(xs0.tail, xs, wip.tail, n - 1, grouped)
+          case t                => wip.promise complete t ; grouped.promise success Some(xs)
         }
       } else {
+        wip.promise success None
         grouped.promise success Some(xs)
-        loop(xs0, new AsyncSeq[A], size, grouped.tail)
+        loop0(xs0, grouped.tail)
       }
+      grouped
     }
-
-    val grouped = new AsyncSeq[AsyncSeq[A]]
-    loop(this, new AsyncSeq[A], size, grouped)
-    grouped
+    loop0(this, new AsyncSeq[AsyncSeq[A]])
   }
 
   def sliding(size: Int)            : AsyncSeq[Vector[A]] = ???
