@@ -167,7 +167,7 @@ final class AsyncSeq[+A] private (private[AsyncSeq] val promise: Promise[Option[
       }
       xs
     }
-    def loop2(xs: AsyncSeq[A1], n: Int): Unit =
+    @tailrec def loop2(xs: AsyncSeq[A1], n: Int): Unit =
       if (n > 0) {
         xs.promise success Some(x) ; loop2(xs.tail, n - 1)
       } else
@@ -267,13 +267,34 @@ final class AsyncSeq[+A] private (private[AsyncSeq] val promise: Promise[Option[
     : AsyncSeq[AsyncSeq[A]] = {
       if (n > 0) {
         xs0.head onComplete {
-          case Success(Some(x)) => wip.promise success Some(x) ; loop(xs0.tail, xs, wip.tail, n - 1, grouped)
-          case t                => wip.promise complete t ; grouped.promise success Some(xs)
+          case Success(Some(x)) =>
+            wip.promise success Some(x)
+            loop(xs0.tail, xs, wip.tail, n - 1, grouped)
+          case Success(None)    =>
+            if (xs eq wip)
+              grouped.promise success None
+            else {
+              wip.promise success None
+              grouped.promise success Some(xs)
+              grouped.tail.promise success None
+            }
+          case Failure(t)       =>
+            if (xs eq wip)
+              grouped.promise failure t
+            else {
+              wip.promise failure t
+              grouped.promise success Some(xs)
+              grouped.tail.promise failure t // TODO: a failed seq grouped is failed? or contains a failed seq?
+            }
         }
       } else {
         wip.promise success None
         grouped.promise success Some(xs)
-        loop0(xs0, grouped.tail)
+        xs0.head onComplete {
+          case Success(Some(_)) => loop0(xs0, grouped.tail)
+          case Success(None)    => grouped.tail.promise success None
+          case Failure(t)       => grouped.tail.promise failure t
+        }
       }
       grouped
     }
