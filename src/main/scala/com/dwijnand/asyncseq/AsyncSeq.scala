@@ -149,14 +149,24 @@ final class AsyncSeq[+A] private {
       xs.promise success Some(x)
       xs0.head onComplete {
         case Success(Some(x)) => loop(x, xs.tail, xs0.tail)
-        case t                => xs.tail.promise complete t
+        case f                => xs.tail.promise complete f
       }
       xs
     }
     loop(x, new AsyncSeq[A1], this)
   }
 
-  def :+[A1 >: A](x: A1)               : AsyncSeq[A1] = ??? // append
+  def :+[A1 >: A](x: A1)(implicit ec: EC): AsyncSeq[A1] = {
+    def loop(xs: AsyncSeq[A1], xs0: AsyncSeq[A]): AsyncSeq[A1] = {
+      xs0.head onComplete {
+        case Success(Some(x)) => xs.promise success Some(x) ; loop(xs.tail, xs0.tail)
+        case Success(None)    => xs.promise success Some(x) ; xs.tail.promise success None
+        case f                => xs.promise complete f
+      }
+      xs
+    }
+    loop(new AsyncSeq[A1], this)
+  }
 
   def padTo[A1 >: A](len: Int, x: A1)  : AsyncSeq[A1] = ???
 
