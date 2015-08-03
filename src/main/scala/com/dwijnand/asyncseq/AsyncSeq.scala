@@ -515,4 +515,30 @@ object AsyncSeq {
     }
     loop(new AsyncSeq[A], f)
   }
+
+  def newBuilder[A]: mutable.Builder[A, AsyncSeq[A]] = new AsyncSeqBuilder[A]
+
+  final class AsyncSeqBuilder[A] extends mutable.Builder[A, AsyncSeq[A]] {
+    private[this] var head: AsyncSeq[A] = _
+    private[this] var next: AsyncSeq[A] = _
+    clear
+
+    def +=(x: A): this.type = {
+      next.promise success Some(x)
+      next = next.tail
+      this
+    }
+
+    def clear(): Unit = {
+      head = new AsyncSeq[A]
+      next = head
+    }
+
+    def result(): AsyncSeq[A] = {
+      next.promise success None
+      val res = head
+      clear
+      res
+    }
+  }
 }
