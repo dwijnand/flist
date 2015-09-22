@@ -28,22 +28,16 @@ scalacOptions  += "-Ywarn-value-discard"
 scalacOptions in (Compile, console) -= "-Ywarn-unused-import"
 scalacOptions in (Test,    console) -= "-Ywarn-unused-import"
 
-// TODO: Switch to enable a bunch & opt-out with comments
-//wartremoverWarnings += Wart.Any                     // bans f-interpolator #158
-  wartremoverWarnings += Wart.Any2StringAdd
-  wartremoverWarnings += Wart.AsInstanceOf
-  wartremoverWarnings += Wart.EitherProjectionPartial
-  wartremoverWarnings += Wart.FinalCaseClass
-  wartremoverWarnings += Wart.IsInstanceOf
-  wartremoverWarnings += Wart.ListOps
-  wartremoverWarnings += Wart.JavaConversions
-  wartremoverWarnings += Wart.MutableDataStructures
-//wartremoverWarnings += Wart.NonUnitStatements       // bans this.type #118
-  wartremoverWarnings += Wart.Null
-  wartremoverWarnings += Wart.OptionPartial
-  wartremoverWarnings += Wart.Return
-  wartremoverWarnings += Wart.TryPartial
-  wartremoverWarnings += Wart.Var
+wartremoverWarnings ++= Warts.unsafe
+wartremoverWarnings  -= Wart.Any                    // bans f-interpolator #158
+wartremoverWarnings  -= Wart.DefaultArguments
+wartremoverWarnings  += Wart.FinalCaseClass
+wartremoverWarnings  += Wart.JavaConversions
+wartremoverWarnings  += Wart.MutableDataStructures
+wartremoverWarnings  -= Wart.NonUnitStatements      // bans this.type #118
+wartremoverWarnings  -= Wart.Product
+wartremoverWarnings  -= Wart.Serializable
+wartremoverWarnings  -= Wart.Throw
 
 initialCommands in console += "\nimport com.dwijnand.asyncseq._"
 initialCommands in console += "\nimport scala.concurrent._"
