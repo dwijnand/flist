@@ -1,5 +1,3 @@
-import SbtKitPre._
-
 lazy val asyncseq = project in file(".")
 
 organization := "com.dwijnand"
