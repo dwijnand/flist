@@ -539,7 +539,7 @@ object AsyncSeq {
 
   def newBuilder[A]: mutable.Builder[A, AsyncSeq[A]] = new AsyncSeqBuilder[A]
 
-  implicit def canBuildFrom[A] = new AsyncSeqCanBuildFrom[A]
+  implicit def canBuildFrom[A]: CBF[GenTraversable[_], A, AsyncSeq[A]] = new AsyncSeqCanBuildFrom[A]
 
   final class AsyncSeqBuilder[A] extends mutable.Builder[A, AsyncSeq[A]] {
     private[this] var head: AsyncSeq[A] = _
