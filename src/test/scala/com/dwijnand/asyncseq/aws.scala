@@ -3,144 +3,28 @@ package com.dwijnand.asyncseq
 import scala.concurrent.duration._
 import scala.concurrent.{ blocking, ExecutionContext => EC, Future }
 
-
 final case class Asg(name: String, lcName: String)
+final case class Lc(name: String)
 
 final case class AsgReq(token: Option[Int] = None)
 final case class AsgRsp(asgs: Vector[Asg], nextToken: Option[Int])
 
-
-final case class Lc(name: String)
-
 final case class LcReq(lcNames: Vector[String] = Vector.empty, token: Option[Int] = None)
 final case class LcRsp(lcs: Vector[Lc], nextToken: Option[Int])
 
-
-object Main {
-  def main(args: Array[String]): Unit = {
-    import scala.concurrent.ExecutionContext.Implicits.global
-
-    val asgClient = new AsgClient
-    val awsClient = new AwsClient(asgClient)
-
-    val (asgsAndLcs: Vector[(Asg, Lc)], timed: Duration) =
-      TimedFuture {
-        awsClient.getAsgs1() flatMap awsClient.getLcsForAsgs1
-      }.await30s
-    checkAndLog(asgsAndLcs, timed)
-
-    val (asgsAndLcs2: Vector[(Asg, Lc)], timed2: Duration) =
-      TimedFuture {
-        awsClient.getLcsForAsgs2(awsClient.getAsgs2()).toVector
-      }.await30s
-    checkAndLog(asgsAndLcs2, timed2)
-  }
-
-  def checkAndLog(asgsAndLcs: Vector[(Asg, Lc)], timed: Duration): Unit = {
-    println(s"timed: ${timed.toHHmmssSSS}")
-
-    val expectedAsgs = AsgClient makeAsgs (1 to 450)
-    val expectedLcs  = AsgClient makeLcs  (1 to 450)
-
-    if (asgsAndLcs != (expectedAsgs zip expectedLcs)) {
-      println(s"asgs and lcs expected don't match actual:")
-      asgsAndLcs foreach { case (asg, lc) => println(s"asg: $asg  lc: $lc") }
-    }
-  }
+object AwsTestUtils {
+  def makeAsgs(r: Range) = r.toVector.map(n => Asg(f"$n%03d", f"lc$n%03d"))
+  def makeLcs( r: Range) = r.toVector.map(n => Lc(f"lc$n%03d"))
 }
+import AwsTestUtils._
 
-final class AwsClient(asgClient: AsgClient) {
-  def getAsgsPage(req: AsgReq = AsgReq())(implicit ec: EC): Future[AsgRsp] = asgClient describeAsgs req
-  def getLcsPage( req: LcReq  = LcReq()) (implicit ec: EC): Future[LcRsp]  = asgClient describeLcs req
-
-  def getAsgs1(req: AsgReq = AsgReq())(implicit ec: EC): Future[Vector[Asg]] = {
-    def loop(req: AsgReq, asgs: Vector[Asg]): Future[Vector[Asg]] =
-      getAsgsPage(req) flatMap { rsp =>
-        val allAsgs = asgs ++ rsp.asgs
-        rsp.nextToken match {
-          case None      => Future successful allAsgs
-          case nextToken => loop(req.copy(token = nextToken), allAsgs)
-        }
-      }
-    loop(req, Vector.empty)
-  }
-
-  def getLcs1(req: LcReq = LcReq())(implicit ec: EC): Future[Vector[Lc]] = {
-    def loop(req: LcReq, lcs: Vector[Lc]): Future[Vector[Lc]] =
-      getLcsPage(req) flatMap { rsp =>
-        val allLcs = lcs ++ rsp.lcs
-        rsp.nextToken match {
-          case None      => Future successful allLcs
-          case nextToken => loop(req.copy(token = nextToken), allLcs)
-        }
-      }
-    loop(req, Vector.empty)
-  }
-
-  def getLcsForAsgs1(asgs: Vector[Asg])(implicit ec: EC): Future[Vector[(Asg, Lc)]] =
-    Future
-      .traverse(asgs grouped 50) { asgs =>
-        getLcs1(LcReq(asgs.map(_.lcName)))
-          .map(_.map(lc => lc.name -> lc).toMap)
-          .map { lcs =>
-            asgs flatMap { asg =>
-              lcs get asg.lcName match {
-                case Some(lc) => Some((asg, lc))
-                case None     => println(s"Dropping asg with no lc: $asg"); None
-              }
-            }
-          }
-      }
-      .map(_.flatten.toVector)
-
-  def getAsgs2(req: AsgReq = AsgReq())(implicit ec: EC): AsyncSeq[Asg] =
-    AsyncSeq
-      .unpaginate(getAsgsPage(req))(asgRsp =>
-        asgRsp.nextToken.map(nextToken => getAsgsPage(req.copy(token = Some(nextToken))))
-      )
-      .flatMap(asgRsp => AsyncSeq.fromSeq(asgRsp.asgs))
-
-  def getLcs2(req: LcReq = LcReq())(implicit ec: EC): AsyncSeq[Lc] =
-    AsyncSeq
-      .unpaginate(getLcsPage(req))(lcRsp =>
-        lcRsp.nextToken.map(nextToken => getLcsPage(req.copy(token = Some(nextToken))))
-      )
-      .flatMap(lcRsp => AsyncSeq.fromSeq(lcRsp.lcs))
-
-  def getLcsForAsgs2(asgs: AsyncSeq[Asg])(implicit ec: EC): AsyncSeq[(Asg, Lc)] = {
-    asgs
-      .grouped(50)
-      .map(asgs =>
-        AsyncSeq.fromFuture(
-          asgs
-            .toVector
-            .flatMap { asgs =>
-              getLcs2(LcReq(asgs.map(_.lcName)))
-                .map(lc => lc.name -> lc)
-                .toMap
-                .map { lcs =>
-                  asgs flatMap { asg =>
-                    lcs get asg.lcName match {
-                      case Some(lc) => Some((asg, lc))
-                      case None     => println(s"Dropping asg with no lc: $asg"); None
-                    }
-                  }
-                }
-                .map(AsyncSeq.fromSeq)
-            }
-        )
-      )
-      .flatten
-  }
-}
-
-final class AsgClient {
-  import AsgClient._
+final class FakeAwsEndpoint {
+  val sleepMillis: Long = 1
 
   def describeAsgs(req: AsgReq)(implicit ec: EC): Future[AsgRsp] =
     Future {
       blocking {
-        Thread sleep 300
+        Thread sleep sleepMillis
         req.token match {
           case None    => asgRsp(  1 to  50, Some(2))
           case Some(2) => asgRsp( 51 to 100, Some(3))
@@ -159,7 +43,7 @@ final class AsgClient {
   def describeLcs(req: LcReq)(implicit ec: EC): Future[LcRsp] =
     Future {
       blocking {
-        Thread sleep 300
+        Thread sleep sleepMillis
         (req.lcNames, req.token) match {
           case (`lcns1`, None)    => lcRsp(  1 to  25, Some(2))
           case (`lcns1`, Some(2)) => lcRsp( 26 to  50, None)
@@ -183,24 +67,113 @@ final class AsgClient {
         }
       }
     }
+
+  private def asgRsp(r: Range, nextToken: Option[Int]) = AsgRsp(makeAsgs(r), nextToken)
+  private def lcRsp( r: Range, nextToken: Option[Int]) = LcRsp( makeLcs(r),  nextToken)
+
+  private def lcNames(r: Range) = r.toVector.map(n => f"lc$n%03d")
+
+  private val lcns1 = lcNames(  1 to 50)
+  private val lcns2 = lcNames( 51 to 100)
+  private val lcns3 = lcNames(101 to 150)
+  private val lcns4 = lcNames(151 to 200)
+  private val lcns5 = lcNames(201 to 250)
+  private val lcns6 = lcNames(251 to 300)
+  private val lcns7 = lcNames(301 to 350)
+  private val lcns8 = lcNames(351 to 400)
+  private val lcns9 = lcNames(401 to 450)
 }
 
-object AsgClient {
-  def makeAsgs(r: Range) = r.toVector.map(n => Asg(f"$n%03d", f"lc$n%03d"))
-  def makeLcs( r: Range) = r.toVector.map(n => Lc(f"lc$n%03d"))
+final class AwsClient(awsEndpoint: FakeAwsEndpoint) {
+  def getAsgsPage(req: AsgReq = AsgReq())(implicit ec: EC): Future[AsgRsp] = awsEndpoint describeAsgs req
+  def getLcsPage( req: LcReq  = LcReq()) (implicit ec: EC): Future[LcRsp]  = awsEndpoint describeLcs req
 
-  def asgRsp(r: Range, nextToken: Option[Int]) = AsgRsp(makeAsgs(r), nextToken)
-  def lcRsp( r: Range, nextToken: Option[Int]) = LcRsp( makeLcs(r),  nextToken)
+  def getAsgs1(req: AsgReq = AsgReq())(implicit ec: EC): Future[Vector[Asg]] = {
+    def loop(req: AsgReq, asgs: Vector[Asg]): Future[Vector[Asg]] =
+      getAsgsPage(req) flatMap { rsp =>
+        rsp.nextToken match {
+          case None => Future successful asgs ++ rsp.asgs
+          case t    => loop(req.copy(token = t), asgs ++ rsp.asgs)
+        }
+      }
+    loop(req, Vector.empty)
+  }
 
-  def lcNames(r: Range) = r.toVector.map(n => f"lc$n%03d")
+  def getLcs1(req: LcReq = LcReq())(implicit ec: EC): Future[Vector[Lc]] = {
+    def loop(req: LcReq, lcs: Vector[Lc]): Future[Vector[Lc]] =
+      getLcsPage(req) flatMap { rsp =>
+        rsp.nextToken match {
+          case None => Future successful lcs ++ rsp.lcs
+          case t    => loop(req.copy(token = t), lcs ++ rsp.lcs)
+        }
+      }
+    loop(req, Vector.empty)
+  }
 
-  val lcns1 = lcNames(  1 to 50)
-  val lcns2 = lcNames( 51 to 100)
-  val lcns3 = lcNames(101 to 150)
-  val lcns4 = lcNames(151 to 200)
-  val lcns5 = lcNames(201 to 250)
-  val lcns6 = lcNames(251 to 300)
-  val lcns7 = lcNames(301 to 350)
-  val lcns8 = lcNames(351 to 400)
-  val lcns9 = lcNames(401 to 450)
+  def getLcsForAsgs1(asgs: Vector[Asg])(implicit ec: EC): Future[Vector[(Asg, Lc)]] =
+    Future
+      .traverse(asgs grouped 50) { asgs =>
+        getLcs1(LcReq(asgs map (_.lcName)))
+          .map(_.map(lc => lc.name -> lc).toMap)
+          .map { lcsMap =>
+            asgs flatMap { asg =>
+              lcsMap get asg.lcName match {
+                case Some(lc) => Seq((asg, lc))
+                case None     => println(s"Dropping asg with no lc: $asg"); Nil
+              }
+            }
+          }
+      }
+      .map(_.flatten.toVector)
+
+  def getAsgs2(req: AsgReq = AsgReq())(implicit ec: EC): AsyncSeq[Asg] =
+    AsyncSeq
+      .unpaginate(getAsgsPage(req))(asgRsp => asgRsp.nextToken map (t => getAsgsPage(req.copy(token = Some(t)))))
+      .flatMap(asgRsp => AsyncSeq fromSeq asgRsp.asgs)
+
+  def getLcs2(req: LcReq = LcReq())(implicit ec: EC): AsyncSeq[Lc] =
+    AsyncSeq
+      .unpaginate(getLcsPage(req))(lcRsp => lcRsp.nextToken map (t => getLcsPage(req.copy(token = Some(t)))))
+      .flatMap(lcRsp => AsyncSeq fromSeq lcRsp.lcs)
+
+  def getLcsForAsgs2(asgs: AsyncSeq[Asg])(implicit ec: EC): AsyncSeq[(Asg, Lc)] = {
+    asgs
+      .grouped(50)
+      .flatMap { asgs =>
+        AsyncSeq fromFuture asgs.toVector.flatMap { asgs =>
+          getLcs2(LcReq(asgs map (_.lcName))).map(lc => lc.name -> lc).toMap map { lcMap =>
+            asgs flatMap { asg =>
+              lcMap get asg.lcName match {
+                case Some(lc) => Seq((asg, lc))
+                case None     => println(s"Dropping asg with no lc: $asg"); Nil
+              }
+            }
+          } map AsyncSeq.fromSeq
+        }
+      }
+  }
+}
+
+object Main {
+  def main(args: Array[String]): Unit = {
+    import scala.concurrent.ExecutionContext.Implicits._
+
+    val awsClient = new AwsClient(new FakeAwsEndpoint)
+
+    checkAndLog(TimedFuture(awsClient.getAsgs1() flatMap awsClient.getLcsForAsgs1).await30s)
+    checkAndLog(TimedFuture(awsClient.getLcsForAsgs2(awsClient.getAsgs2()).toVector).await30s)
+  }
+
+  def checkAndLog(t: (Vector[(Asg, Lc)], Duration)): Unit = {
+    val (asgsAndLcs, timed) = t
+    println(s"timed: ${timed.toHHmmssSSS}")
+
+    val expectedAsgs = makeAsgs(1 to 450)
+    val expectedLcs  = makeLcs (1 to 450)
+
+    if (asgsAndLcs != (expectedAsgs zip expectedLcs)) {
+      println(s"asgs and lcs expected don't match actual:")
+      asgsAndLcs foreach { case (asg, lc) => println(s"asg: $asg  lc: $lc") }
+    }
+  }
 }
