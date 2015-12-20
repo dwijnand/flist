@@ -3,10 +3,8 @@ package com.dwijnand.asyncseq
 import scala.annotation.tailrec
 import scala.annotation.unchecked.{ uncheckedVariance => uV }
 import scala.collection.generic.{ CanBuildFrom => CBF }
-import scala.collection.immutable.IndexedSeq
-import scala.collection.{ GenTraversable, mutable }
+import scala.collection.mutable
 import scala.concurrent.{ ExecutionContext => EC, Future, Promise }
-import scala.reflect.{ ClassTag => CTag }
 import scala.util.{ Failure, Success }
 
 final class AsyncSeq[+A] private (private[AsyncSeq] val promise: Promise[Option[A @uV]], tl: => AsyncSeq[A]) {
@@ -15,161 +13,6 @@ final class AsyncSeq[+A] private (private[AsyncSeq] val promise: Promise[Option[
   val head: Future[Option[A]] = promise.future
 
   lazy val tail: AsyncSeq[A] = tl
-
-  // Foreach
-  def foreach[U](f: A => U)(implicit ec: EC): Future[Unit] =
-    head flatMap {
-      case None    => Future.successful(())
-      case Some(x) => f(x) ; tail foreach f
-    }
-
-  // Size info
-  @tailrec def hasDefiniteSize: Boolean =
-    head.value match {
-      case None                => false
-      case Some(Success(None)) => true
-      case Some(Success(_))    => tail.hasDefiniteSize
-      case Some(Failure(_))    => true
-    }
-
-  def isTraversableAgain: Boolean = true
-
-  def isEmpty (implicit ec: EC): Future[Boolean] = head.map(_.isEmpty)
-  def nonEmpty(implicit ec: EC): Future[Boolean] = head.map(_.nonEmpty)
-  def size    (implicit ec: EC): Future[Int]     = foldLeft(0)((c, _) => c + 1)
-  def length  (implicit ec: EC): Future[Int]     = foldLeft(0)((c, _) => c + 1)
-
-  // Iterators
-  def iterator(implicit ec: EC): Future[Iterator[A]] = toIterator
-
-  // Element Retrieval
-//def head: Future[Option[A]] = head
-
-  def last(implicit ec: EC): Future[Option[A]] = {
-    def loop(xs: AsyncSeq[A]): Future[Option[A]] =
-      xs.tail.head flatMap {
-        case None    => xs.head
-        case Some(_) => loop(xs.tail)
-      }
-    head flatMap {
-      case None    => head
-      case Some(x) => loop(this)
-    }
-  }
-
-  def find(p: A => Boolean)(implicit ec: EC): Future[Option[A]] =
-    head flatMap {
-      case Some(x) if p(x) => Future successful Some(x)
-      case Some(_)         => tail find p
-      case None            => Future successful None
-    }
-
-  // Indexing and Length
-  // TODO: Future[Option[A]] ?
-  def apply(idx: Int)(implicit ec: EC): Future[A] = {
-    def ex = new scala.IndexOutOfBoundsException("" + idx)
-    if (idx < 0) Future failed ex
-    else drop(idx).head.map(_.getOrElse(throw ex))
-  }
-
-  def isDefinedAt(idx: Int)(implicit ec: EC): Future[Boolean] =
-    if (idx < 0) Future successful false
-    else lengthCompare(idx).map(_ > 0)
-
-  def lengthCompare(len: Int)(implicit ec: EC): Future[Int] = {
-    def loop(i: Int, xs: AsyncSeq[A]): Future[Int] =
-      xs.isEmpty flatMap {
-        case true if i == len => Future successful 0
-        case true if i < len  => Future successful -1
-        case true if i > len  => Future successful 1
-        case false            => loop(i + 1, xs.tail)
-      }
-    if (len < 0) Future successful 1
-    else loop(0, this)
-  }
-
-  // Addition
-  def ++[A1 >: A](that: AsyncSeq[A1])(implicit ec: EC): AsyncSeq[A1] = {
-    def loopThis(xs: AsyncSeq[A1], xs0: AsyncSeq[A]): AsyncSeq[A1] = {
-      xs0.head onComplete {
-        case Success(Some(x)) => xs.promise success Some(x) ; loopThis(xs.tail, xs0.tail)
-        case Success(None)    => loopThat(xs, that)
-        case f                => xs.promise tryComplete f
-      }
-      xs
-    }
-    def loopThat(xs: AsyncSeq[A1], xs0: AsyncSeq[A1]): Unit = {
-      xs0.head onComplete {
-        case Success(Some(x)) => xs.promise success Some(x) ; loopThat(xs.tail, xs0.tail)
-        case Success(None)    => xs.promise success None
-        case f                => xs.promise tryComplete f
-      }
-    }
-    loopThis(new AsyncSeq[A1], this)
-  }
-
-  def ++:[A1 >: A](that: AsyncSeq[A1])(implicit ec: EC): AsyncSeq[A1] = {
-    def loopThis(xs: AsyncSeq[A1], xs0: AsyncSeq[A]): Unit = {
-      xs0.head onComplete {
-        case Success(Some(x)) => xs.promise success Some(x) ; loopThis(xs.tail, xs0.tail)
-        case Success(None)    => xs.promise success None
-        case f                => xs.promise tryComplete f
-      }
-    }
-    def loopThat(xs: AsyncSeq[A1], xs0: AsyncSeq[A1]): AsyncSeq[A1] = {
-      xs0.head onComplete {
-        case Success(Some(x)) => xs.promise success Some(x) ; loopThat(xs.tail, xs0.tail)
-        case Success(None)    => loopThis(xs, this)
-        case f                => xs.promise tryComplete f
-      }
-      xs
-    }
-    loopThat(new AsyncSeq[A1], that)
-  }
-
-  def +:[A1 >: A](x: A1)(implicit ec: EC): AsyncSeq[A1] =
-    new AsyncSeq[A1](Promise[Option[A1]] success Some(x), this)
-
-  def :+[A1 >: A](x: A1)(implicit ec: EC): AsyncSeq[A1] = {
-    def loop(xs: AsyncSeq[A1], xs0: AsyncSeq[A]): AsyncSeq[A1] = {
-      xs0.head onComplete {
-        case Success(Some(x)) => xs.promise success Some(x) ; loop(xs.tail, xs0.tail)
-        case Success(None)    => xs.promise success Some(x) ; xs.tail.promise success None
-        case f                => xs.promise complete f
-      }
-      xs
-    }
-    loop(new AsyncSeq[A1], this)
-  }
-
-  def padTo[A1 >: A](len: Int, x: A1)(implicit ec: EC): AsyncSeq[A1] = {
-    def loop1(xs: AsyncSeq[A1], xs0: AsyncSeq[A], n: Int): AsyncSeq[A1] = {
-      xs0.head onComplete {
-        case Success(Some(x)) => xs.promise success Some(x) ; loop1(xs.tail, xs0.tail, n - 1)
-        case Success(None)    => loop2(xs, n)
-        case f                => xs.promise complete f
-      }
-      xs
-    }
-    @tailrec def loop2(xs: AsyncSeq[A1], n: Int): Unit =
-      if (n > 0) {
-        xs.promise success Some(x) ; loop2(xs.tail, n - 1)
-      } else
-        xs.promise success None
-    loop1(new AsyncSeq[A1], this, len)
-  }
-
-  // Comparisons
-  def sameElements[A1 >: A](that: AsyncSeq[A1])(implicit ec: EC): Future[Boolean] = {
-    val xy = for { x <- this.head ; y <- that.head } yield (x, y)
-    xy flatMap {
-      case (Some(x), Some(y)) if x == y => this.tail sameElements that.tail
-      case (None, None)                 => Future successful true
-      case _                            => Future successful false
-    }
-  }
-
-  def contains[A1 >: A](x: A1)(implicit ec: EC)               : Future[Boolean] = exists(_ == x)
 
   // Maps
   def map[B](f: A => B)(implicit ec: EC): AsyncSeq[B] = {
@@ -184,20 +27,6 @@ final class AsyncSeq[+A] private (private[AsyncSeq] val promise: Promise[Option[
   }
 
   def flatMap[B](f: A => AsyncSeq[B])(implicit ec: EC) : AsyncSeq[B] = map(f).flatten
-
-  def drop(n: Int)(implicit ec: EC): AsyncSeq[A] = {
-    if (n <= 0) this
-    else AsyncSeq fromFuture isEmpty.map(if (_) this else tail drop n - 1)
-  }
-
-  def dropWhile(p: A => Boolean)(implicit ec: EC): AsyncSeq[A] = {
-    AsyncSeq fromFuture
-      head.map {
-        case Some(x) if p(x) => tail dropWhile p
-        case Some(_)         => tail
-        case None            => this
-      }
-  }
 
   // Other iterators
   def grouped(size: Int)(implicit ec: EC): AsyncSeq[AsyncSeq[A]] = {
@@ -243,84 +72,12 @@ final class AsyncSeq[+A] private (private[AsyncSeq] val promise: Promise[Option[
     loop0(this, new AsyncSeq[AsyncSeq[A]])
   }
 
-  // Element Conditions
-  def forall(p: A => Boolean)(implicit ec: EC): Future[Boolean] =
-    head flatMap {
-      case Some(x) if p(x) => tail forall p
-      case Some(_)         => Future successful false
-      case None            => Future successful true
-    }
-
-  def exists(p: A => Boolean)(implicit ec: EC): Future[Boolean] =
-    head flatMap {
-      case Some(x) if p(x) => Future successful true
-      case Some(_)         => tail exists p
-      case None            => Future successful false
-    }
-
-  def count(p: A => Boolean)(implicit ec: EC): Future[Int] =
-    foldLeft(0)((res, x) => if (p(x)) res + 1 else res)
-
-  // Folds
-  def fold  [A1 >: A](z: A1)(op: (A1, A1) => A1)(implicit ec: EC): Future[A1]         = foldLeft(z)(op)
-  def reduce[A1 >: A]       (op: (A1, A1) => A1)(implicit ec: EC): Future[Option[A1]] = reduceLeft(op)
-
   def foldLeft[B](z: B)(op: (B, A) => B)(implicit ec: EC): Future[B] = {
     head flatMap {
       case Some(x) => tail.foldLeft(op(z, x))(op)
       case None    => Future successful z
     }
   }
-
-  def foldRight[B](z: B)(op: (A, B) => B)(implicit ec: EC): Future[B] = {
-    head flatMap {
-      case Some(x) => tail.foldRight(z)(op).map(b => op(x, b))
-      case None    => Future successful z
-    }
-  }
-
-  def reduceLeft[A1 >: A](op: (A1, A) => A1)(implicit ec: EC): Future[Option[A1]] =
-    head flatMap {
-      case Some(x) => tail.foldLeft[A1](x)(op).map(Some(_))
-      case None    => head
-    }
-
-  def reduceRight[A1 >: A](op: (A, A1) => A1)(implicit ec: EC): Future[Option[A1]] = {
-    def loop(x: A, xs: AsyncSeq[A]): Future[Option[A1]] =
-      xs.tail.head flatMap {
-        case Some(y) => loop(y, xs.tail).map(b => b.map(b => op(x, b)))
-        case None    => xs.head
-      }
-    head flatMap {
-      case Some(x) => loop(x, this)
-      case None    => head
-    }
-  }
-
-  // Specific Folds
-  def sum    [A1 >: A](implicit num: Numeric[A1], ec: EC): Future[A1] = foldLeft(num.zero)(num.plus)
-  def product[A1 >: A](implicit num: Numeric[A1], ec: EC): Future[A1] = foldLeft(num.one)(num.times)
-
-  def min[A1 >: A](implicit ord: Ordering[A1], ec: EC): Future[Option[A]] =
-    reduceLeft((x, y) => if (ord.lteq(x, y)) x else y)
-
-  def max[A1 >: A](implicit ord: Ordering[A1], ec: EC): Future[Option[A]] =
-    reduceLeft((x, y) => if (ord.gteq(x, y)) x else y)
-
-  private def reduceBy[B](f: A => B)(p: (B, B) => Boolean)(implicit ec: EC): Future[Option[A]] = {
-    head flatMap {
-      case Some(x) =>
-        foldLeft((x, f(x))) { case ((x, fx), y) =>
-          val fy = f(y)
-          if (p(fx, fy)) (x, fx) else (y, fy)
-        }
-        .map(t => Some(t._1))
-      case None    => head
-    }
-  }
-
-  def minBy[B](f: A => B)(implicit ord: Ordering[B], ec: EC): Future[Option[A]] = reduceBy(f)(ord.lt)
-  def maxBy[B](f: A => B)(implicit ord: Ordering[B], ec: EC): Future[Option[A]] = reduceBy(f)(ord.gt)
 
   def flatten[B](implicit ec: EC, ev: A <:< AsyncSeq[B]): AsyncSeq[B] = {
     def loopSeqOfSeq(xs: AsyncSeq[B], xss1: AsyncSeq[A]): AsyncSeq[B] = {
@@ -343,80 +100,38 @@ final class AsyncSeq[+A] private (private[AsyncSeq] val promise: Promise[Option[
     loopSeqOfSeq(new AsyncSeq[B], this)
   }
 
-  // Copying
-  def copyToBuffer[B >: A](xs: mutable.Buffer[B])(implicit ec: EC): Future[Unit] = toList.map(xs ++= _)
-
-  def copyToArray[B >: A](arr: Array[B])                      (implicit ec: EC): Future[Unit] = copyToArray(arr, 0, arr.length)
-  def copyToArray[B >: A](arr: Array[B], start: Int)          (implicit ec: EC): Future[Unit] = copyToArray(arr, start, arr.length - start)
-  def copyToArray[B >: A](arr: Array[B], start: Int, len: Int)(implicit ec: EC): Future[Unit] = {
-    val end = (start + len) min arr.length
-    def loop(xs: AsyncSeq[A], i: Int): Future[Unit] = {
-      xs.head flatMap {
-        case Some(x) if i < end => arr(i) = x ; loop(xs.tail, i + 1)
-        case _                  => Future.successful(())
-      }
-    }
-    loop(this, start)
-  }
-
   // Conversions
   private def fromBuilder[A1 >: A, CC[_]](b: mutable.Builder[A1, CC[A1]])(implicit ec: EC): Future[CC[A1]] =
     foldLeft(b)(_ += _).map(_.result)
 
   def to[Col[_]](implicit cbf: CBF[Nothing, A, Col[A @uV]], ec: EC): Future[Col[A @uV]] = fromBuilder(cbf())
 
-  private def to2[A1 >: A, Col[_]](implicit cbf: CBF[Nothing, A1, Col[A1 @uV]], ec: EC): Future[Col[A1 @uV]] =
-    fromBuilder(cbf())
-
-  def toArray [A1 >: A: CTag](implicit ec: EC): Future[Array[A1]]          = to2[A1, Array]
-  def toBuffer[A1 >: A]      (implicit ec: EC): Future[mutable.Buffer[A1]] = to2[A1, mutable.Buffer]
-  def toSet   [A1 >: A]      (implicit ec: EC): Future[Set[A1]]            = to2[A1, Set]
-
-  def toList  (implicit ec: EC): Future[List[A]]   = to[List]
-  def toStream(implicit ec: EC): Future[Stream[A]] = to[Stream]
   def toVector(implicit ec: EC): Future[Vector[A]] = to[Vector]
 
   def toMap[K, V](implicit ec: EC, ev: A <:< (K, V)): Future[Map[K, V]] =
     foldLeft(Map.newBuilder[K, V])(_ += _).map(_.result)
 
-  def toIterator   (implicit ec: EC): Future[Iterator[A]]    = toList.map(_.iterator)
-  def toIndexedSeq (implicit ec: EC): Future[IndexedSeq[A]]  = toVector
-  def toSeq        (implicit ec: EC): Future[Seq[A]]         = toIndexedSeq
-  def toIterable   (implicit ec: EC): Future[Iterable[A]]    = toSeq
-  def toTraversable(implicit ec: EC): Future[Traversable[A]] = toIterable
-
-  def toStreamFuture: Stream[Future[Option[A]]] = {
-    lazy val stream: Stream[AsyncSeq[A]] = Stream.cons(this, stream.map(_.tail))
-    stream.map(_.head)
-  }
-
   // Strings
-  def mkString             : String = mkString("")
-  def mkString(sep: String): String = mkString("", sep, "")
-
-  def mkString(start: String, sep: String, end: String): String =
-    addString(new StringBuilder(), start, sep, end).toString
-
-  def addString(b: StringBuilder)             : StringBuilder = addString(b, "")
-  def addString(b: StringBuilder, sep: String): StringBuilder = addString(b, "", sep, "")
-
-  def addString(b: StringBuilder, start: String, sep: String, end: String): StringBuilder = {
-    @tailrec def loop(xs: AsyncSeq[A], first: Boolean): Unit = {
-      xs.head.value match {
-        case None                   => if (!first) b append sep; b append '?'
-        case Some(Success(None))    =>
-        case Some(Success(Some(x))) => if (!first) b append sep; b append x ; loop(xs.tail, first = false)
-        case Some(Failure(t))       => if (!first) b append sep; b append s"[ex: $t]"
-      }
-    }
-
-    b append start
-    loop(this, first = true)
-    b append end
-    b
-  }
-
-  override def toString = this.mkString("AsyncSeq(", ", ", ")")
+//  def mkString(start: String, sep: String, end: String): String =
+//    addString(new StringBuilder(), start, sep, end).toString
+//
+//  def addString(b: StringBuilder, start: String, sep: String, end: String): StringBuilder = {
+//    @tailrec def loop(xs: AsyncSeq[A], first: Boolean): Unit = {
+//      xs.head.value match {
+//        case None                   => if (!first) b append sep; b append '?'
+//        case Some(Success(None))    =>
+//        case Some(Success(Some(x))) => if (!first) b append sep; b append x ; loop(xs.tail, first = false)
+//        case Some(Failure(t))       => if (!first) b append sep; b append s"[ex: $t]"
+//      }
+//    }
+//
+//    b append start
+//    loop(this, first = true)
+//    b append end
+//    b
+//  }
+//
+//  override def toString = this.mkString("AsyncSeq(", ", ", ")")
 }
 
 object AsyncSeq {
@@ -459,38 +174,5 @@ object AsyncSeq {
       xs
     }
     loop(new AsyncSeq[A], f)
-  }
-
-  def newBuilder[A]: mutable.Builder[A, AsyncSeq[A]] = new AsyncSeqBuilder[A]
-
-  implicit def canBuildFrom[A]: CBF[GenTraversable[_], A, AsyncSeq[A]] = new AsyncSeqCanBuildFrom[A]
-
-  final class AsyncSeqBuilder[A] extends mutable.Builder[A, AsyncSeq[A]] {
-    private[this] var head: AsyncSeq[A] = _
-    private[this] var next: AsyncSeq[A] = _
-    clear
-
-    def +=(x: A): this.type = {
-      next.promise success Some(x)
-      next = next.tail
-      this
-    }
-
-    def clear(): Unit = {
-      head = new AsyncSeq[A]
-      next = head
-    }
-
-    def result(): AsyncSeq[A] = {
-      next.promise success None
-      val res = head
-      clear
-      res
-    }
-  }
-
-  final class AsyncSeqCanBuildFrom[A] extends CBF[GenTraversable[_], A, AsyncSeq[A]] {
-    def apply(from: GenTraversable[_]) = newBuilder
-    def apply()                        = newBuilder
   }
 }
