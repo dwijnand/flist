@@ -6,9 +6,8 @@ import scala.collection.generic.{ CanBuildFrom => CBF }
 import scala.collection.immutable.IndexedSeq
 import scala.collection.{ GenTraversable, mutable }
 import scala.concurrent.{ ExecutionContext => EC, Future, Promise }
-import scala.reflect.ClassTag
+import scala.reflect.{ ClassTag => CTag }
 import scala.util.{ Failure, Success }
-import scala.{ PartialFunction => ?=> }
 
 final class AsyncSeq[+A] private (private[AsyncSeq] val promise: Promise[Option[A @uV]], tl: => AsyncSeq[A]) {
   def this() = this(Promise[Option[A]](), new AsyncSeq[A])
@@ -16,6 +15,13 @@ final class AsyncSeq[+A] private (private[AsyncSeq] val promise: Promise[Option[
   val head: Future[Option[A]] = promise.future
 
   lazy val tail: AsyncSeq[A] = tl
+
+  // Foreach
+  def foreach[U](f: A => U)(implicit ec: EC): Future[Unit] =
+    head flatMap {
+      case None    => Future.successful(())
+      case Some(x) => f(x) ; tail foreach f
+    }
 
   // Size info
   @tailrec def hasDefiniteSize: Boolean =
@@ -32,12 +38,6 @@ final class AsyncSeq[+A] private (private[AsyncSeq] val promise: Promise[Option[
   def nonEmpty(implicit ec: EC): Future[Boolean] = head.map(_.nonEmpty)
   def size    (implicit ec: EC): Future[Int]     = foldLeft(0)((c, _) => c + 1)
   def length  (implicit ec: EC): Future[Int]     = foldLeft(0)((c, _) => c + 1)
-
-  def foreach[U](f: A => U)(implicit ec: EC): Future[Unit] =
-    head flatMap {
-      case None    => Future.successful(())
-      case Some(x) => f(x) ; tail foreach f
-    }
 
   // Iterators
   def iterator(implicit ec: EC): Future[Iterator[A]] = toIterator
@@ -87,22 +87,6 @@ final class AsyncSeq[+A] private (private[AsyncSeq] val promise: Promise[Option[
     if (len < 0) Future successful 1
     else loop(0, this)
   }
-
-  def indices(implicit ec: EC): AsyncSeq[Int] = ??? /// 0 until length
-
-  // Index Search
-  def indexOf[A1 >: A](x: A1)                            : Future[Int] = indexWhere(_ == x)
-  def indexOf[A1 >: A](x: A1, from: Int)                 : Future[Int] = ???
-  def lastIndexOf[A1 >: A](x: A1)                        : Future[Int] = ???
-  def lastIndexOf[A1 >: A](x: A1, end: Int)              : Future[Int] = ???
-  def indexWhere(p: A => Boolean, from: Int)             : Future[Int] = ???
-  def indexWhere(p: A => Boolean)                        : Future[Int] = ???
-  def lastIndexWhere[A1 >: A](x: A1)                     : Future[Int] = ???
-  def lastIndexWhere[A1 >: A](x: A1, end: Int)           : Future[Int] = ???
-  def segmentLength(p: A => Boolean, from: Int)          : Future[Int] = ???
-  def prefixLength(p: A => Boolean)                      : Future[Int] = ???
-  def indexOfSlice[A1 >: A](ys: AsyncSeq[A1])            : Future[Int] = ???
-  def indexOfSlice[A1 >: A](ys: AsyncSeq[A1], from: Int) : Future[Int] = ???
 
   // Addition
   def ++[A1 >: A](that: AsyncSeq[A1])(implicit ec: EC): AsyncSeq[A1] = {
@@ -175,27 +159,6 @@ final class AsyncSeq[+A] private (private[AsyncSeq] val promise: Promise[Option[
     loop1(new AsyncSeq[A1], this, len)
   }
 
-  // Updates
-  def patch[A1 >: A](from: Int, patch: AsyncSeq[A1], replaced: Int): AsyncSeq[A1] = ???
-  def updated[A1 >: A](idx: Int, x: A1): AsyncSeq[A1] = ???
-
-  // Sorting
-  def sorted[A1 >: A](implicit ord: Ordering[A1])     : AsyncSeq[A] = ???
-  def sortWith(lt: (A, A) => Boolean)                 : AsyncSeq[A] = ???
-  def sortBy[B](f: A => B)(implicit ord: Ordering[B]) : AsyncSeq[A] = sorted(ord on f)
-
-  // Reversals
-  def reverse: AsyncSeq[A]                  = ???
-  def reverseIterator: Future[Iterator[A]]  = ???
-  def reverseMap[B](f: A => B): AsyncSeq[B] = ???
-
-  // Multiset Operations
-  def union[A1 >: A](that: AsyncSeq[A1])(implicit ec: EC): AsyncSeq[A1] = this ++ that
-
-  def intersect[A1 >: A](that: AsyncSeq[A1]): AsyncSeq[A] = ???
-  def diff     [A1 >: A](that: AsyncSeq[A1]): AsyncSeq[A] = ???
-  def distinct                              : AsyncSeq[A] = ???
-
   // Comparisons
   def sameElements[A1 >: A](that: AsyncSeq[A1])(implicit ec: EC): Future[Boolean] = {
     val xy = for { x <- this.head ; y <- that.head } yield (x, y)
@@ -206,12 +169,7 @@ final class AsyncSeq[+A] private (private[AsyncSeq] val promise: Promise[Option[
     }
   }
 
-  def startsWith[B](that: AsyncSeq[B])                        : Future[Boolean] = ???
-  def startsWith[B](that: AsyncSeq[B], offset: Int)           : Future[Boolean] = ???
-  def endsWith[B](that: AsyncSeq[B])                          : Future[Boolean] = ???
   def contains[A1 >: A](x: A1)(implicit ec: EC)               : Future[Boolean] = exists(_ == x)
-  def containsSlice[B](that: AsyncSeq[B])                     : Future[Boolean] = ???
-  def corresponds[B](that: AsyncSeq[B])(p: (A, B) => Boolean) : Future[Boolean] = ???
 
   // Maps
   def map[B](f: A => B)(implicit ec: EC): AsyncSeq[B] = {
@@ -226,19 +184,11 @@ final class AsyncSeq[+A] private (private[AsyncSeq] val promise: Promise[Option[
   }
 
   def flatMap[B](f: A => AsyncSeq[B])(implicit ec: EC) : AsyncSeq[B] = map(f).flatten
-  def collect[B](pf: A ?=> B)                          : AsyncSeq[B] = ???
-
-  // Subcollections
-//def tail                         : AsyncSeq[A] = tail
-  def init                         : AsyncSeq[A] = dropRight(1)
-  def slice(from: Int, until: Int) : AsyncSeq[A] = ???
 
   def drop(n: Int)(implicit ec: EC): AsyncSeq[A] = {
     if (n <= 0) this
     else AsyncSeq fromFuture isEmpty.map(if (_) this else tail drop n - 1)
   }
-
-  def dropRight(n: Int): AsyncSeq[A] = ???
 
   def dropWhile(p: A => Boolean)(implicit ec: EC): AsyncSeq[A] = {
     AsyncSeq fromFuture
@@ -248,14 +198,6 @@ final class AsyncSeq[+A] private (private[AsyncSeq] val promise: Promise[Option[
         case None            => this
       }
   }
-
-  def take(n: Int)                 : AsyncSeq[A] = ???
-  def takeRight(n: Int)            : AsyncSeq[A] = ???
-  def takeWhile(p: A => Boolean)   : AsyncSeq[A] = ???
-  def filter(   p: A => Boolean)   : AsyncSeq[A] = filterImpl(p, isFlipped = false)
-  def filterNot(p: A => Boolean)   : AsyncSeq[A] = filterImpl(p, isFlipped = true)
-
-  private def filterImpl(p: A => Boolean, isFlipped: Boolean): AsyncSeq[A] = ???
 
   // Other iterators
   def grouped(size: Int)(implicit ec: EC): AsyncSeq[AsyncSeq[A]] = {
@@ -300,20 +242,6 @@ final class AsyncSeq[+A] private (private[AsyncSeq] val promise: Promise[Option[
     }
     loop0(this, new AsyncSeq[AsyncSeq[A]])
   }
-
-  def sliding(size: Int)            : AsyncSeq[Vector[A]] = ???
-  def sliding(size: Int, step: Int) : AsyncSeq[Vector[A]] = ???
-
-  // Zippers
-  def zip[A1 >: A, B](ys: AsyncSeq[B])                 : AsyncSeq[(A1, B)]   = ???
-  def zipAll[B, A1 >: A](ys: AsyncSeq[B], a: A1, b: B) : AsyncSeq[(A1, B)]   = ???
-  def zipWithIndex[A1 >: A]                            : AsyncSeq[(A1, Int)] = ???
-
-  // Subdivisions
-  def splitAt(n: Int)            : (AsyncSeq[A], AsyncSeq[A])  = ???
-  def span(p: A => Boolean)      : (AsyncSeq[A], AsyncSeq[A])  = ???
-  def partition(p: A => Boolean) : (AsyncSeq[A], AsyncSeq[A])  = ???
-  def groupBy[K](f: A => K)      : Future[Map[K, AsyncSeq[A]]] = ???
 
   // Element Conditions
   def forall(p: A => Boolean)(implicit ec: EC): Future[Boolean] =
@@ -394,10 +322,6 @@ final class AsyncSeq[+A] private (private[AsyncSeq] val promise: Promise[Option[
   def minBy[B](f: A => B)(implicit ord: Ordering[B], ec: EC): Future[Option[A]] = reduceBy(f)(ord.lt)
   def maxBy[B](f: A => B)(implicit ord: Ordering[B], ec: EC): Future[Option[A]] = reduceBy(f)(ord.gt)
 
-  def scan[B >: A](z: B)(op: (B, B) => B): AsyncSeq[B] = ???
-  def scanLeft[B]( z: B)(op: (B, A) => B): AsyncSeq[B] = ???
-  def scanRight[B](z: B)(op: (A, B) => B): AsyncSeq[B] = ???
-
   def flatten[B](implicit ec: EC, ev: A <:< AsyncSeq[B]): AsyncSeq[B] = {
     def loopSeqOfSeq(xs: AsyncSeq[B], xss1: AsyncSeq[A]): AsyncSeq[B] = {
       xss1.head onComplete {
@@ -444,9 +368,9 @@ final class AsyncSeq[+A] private (private[AsyncSeq] val promise: Promise[Option[
   private def to2[A1 >: A, Col[_]](implicit cbf: CBF[Nothing, A1, Col[A1 @uV]], ec: EC): Future[Col[A1 @uV]] =
     fromBuilder(cbf())
 
-  def toArray [A1 >: A: ClassTag](implicit ec: EC): Future[Array[A1]]          = to2[A1, Array]
-  def toBuffer[A1 >: A]          (implicit ec: EC): Future[mutable.Buffer[A1]] = to2[A1, mutable.Buffer]
-  def toSet   [A1 >: A]          (implicit ec: EC): Future[Set[A1]]            = to2[A1, Set]
+  def toArray [A1 >: A: CTag](implicit ec: EC): Future[Array[A1]]          = to2[A1, Array]
+  def toBuffer[A1 >: A]      (implicit ec: EC): Future[mutable.Buffer[A1]] = to2[A1, mutable.Buffer]
+  def toSet   [A1 >: A]      (implicit ec: EC): Future[Set[A1]]            = to2[A1, Set]
 
   def toList  (implicit ec: EC): Future[List[A]]   = to[List]
   def toStream(implicit ec: EC): Future[Stream[A]] = to[Stream]
