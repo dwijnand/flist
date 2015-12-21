@@ -1,6 +1,8 @@
 package asyncseq
 
+import scala.annotation.tailrec
 import scala.concurrent.{ ExecutionContext => EC, Future }
+import scala.util.{ Failure, Success }
 
 // TODO: AnyVal, toString, final, sealed
 
@@ -56,6 +58,29 @@ final case class FList[+A](value: Future[Option[(A, Option[FList[A]])]]) {
     }
     FList(loop(this map ev))
   }
+
+  // Strings
+  def mkString(start: String, sep: String, end: String): String =
+    addString(new StringBuilder(), start, sep, end).toString
+
+  def addString(b: StringBuilder, start: String, sep: String, end: String): StringBuilder = {
+    @tailrec def loop(xs: FList[A], first: Boolean): Unit = {
+      xs.value.value match {
+        case None                              => if (!first) b append sep; b append '?'
+        case Some(Failure(e))                  => if (!first) b append sep; b append s"[ex: $e]"
+        case Some(Success(None))               =>
+        case Some(Success(Some((h, None))))    => if (!first) b append sep; b append h;
+        case Some(Success(Some((h, Some(t))))) => if (!first) b append sep; b append h; loop(t, first = false)
+      }
+    }
+
+    b append start
+    loop(this, first = true)
+    b append end
+    b
+  }
+
+  override def toString = this.mkString("FList(", ", ", ")")
 }
 
 sealed trait FutureList[+A] extends Product with Serializable {
