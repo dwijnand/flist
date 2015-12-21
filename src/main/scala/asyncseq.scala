@@ -17,11 +17,10 @@ import scala.util.{ Failure, Success }
 
 final case class FList[+A](value: Future[Option[(A, Option[FList[A]])]]) {
   def map[B](f: A => B)(implicit ec: EC): FList[B] = {
-    FList(value flatMap {
-      case None                     => Future successful None
-      case Some((head, None))       => Future successful Some((f(head), None))
-      case Some((head, Some(tail))) => Future successful Some((f(head), Some(tail map f)))
-    })
+    FList(value map (_ map {
+      case (head, None)       => (f(head), None)
+      case (head, Some(tail)) => (f(head), Some(tail map f))
+    }))
   }
 
   def flatMap[B](f: A => FList[B])(implicit ec: EC) : FList[B] = map(f).flatten
@@ -38,9 +37,9 @@ final case class FList[+A](value: Future[Option[(A, Option[FList[A]])]]) {
       optTail match {
         case None       => Future successful Some((head, finalTail))
         case Some(tail) =>
-          tail.value flatMap {
-            case None            => Future successful Some((head, finalTail))
-            case Some((h, optT)) => Future successful Some((head, Some(FList(inner(h, optT, finalTail)))))
+          tail.value map {
+            case None            => Some((head, finalTail))
+            case Some((h, optT)) => Some((head, Some(FList(inner(h, optT, finalTail)))))
           }
       }
     }
