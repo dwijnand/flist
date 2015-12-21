@@ -24,6 +24,8 @@ final case class FList[+A](value: Future[Option[(A, Option[FList[A]])]]) {
     })
   }
 
+  def flatMap[B](f: A => FList[B])(implicit ec: EC) : FList[B] = map(f).flatten
+
   /*
   flatten (us1 :: us2 :: FNil) ::
           (uk1 :: uk2 :: FNil) ::
