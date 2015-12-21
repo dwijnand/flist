@@ -41,9 +41,6 @@ final case class FList[+A](value: Future[Option[(A, FList[A])]]) {
   }
 
   // Strings
-  def mkString(start: String, sep: String, end: String): String =
-    addString(new StringBuilder(), start, sep, end).toString
-
   def addString(b: StringBuilder, start: String, sep: String, end: String): StringBuilder = {
     @tailrec def loop(xs: FList[A], first: Boolean): Unit = {
       xs.value.value match {
@@ -60,8 +57,66 @@ final case class FList[+A](value: Future[Option[(A, FList[A])]]) {
     b
   }
 
+  def mkString(start: String, sep: String, end: String): String =
+    addString(new StringBuilder(), start, sep, end).toString
+
   override def toString = this.mkString("FList(", ", ", ")")
 }
+
+//////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////
+
+sealed trait AsyncList[+A] {
+  def future: Future[AsyncList[A]] = Future successful this
+
+  def map[B](f: A => B)(implicit ec: EC): AsyncList[B] =
+    this match {
+      case AsyncNil         => AsyncNil
+      case AsyncCons(h, ft) => AsyncCons(f(h), ft map (_ map f))
+    }
+
+  def flatMap[B](f: A => AsyncList[B])(implicit ec: EC): Future[AsyncList[B]] = ??? // ... -.-
+
+  // Strings
+  def addString(b: StringBuilder, start: String, sep: String, end: String): StringBuilder = {
+    @tailrec def loop(xs: AsyncList[A], first: Boolean): Unit = {
+      xs match {
+        case AsyncNil         =>
+        case AsyncCons(h, ft) =>
+          if (!first) b append sep
+          b append h
+          ft.value match {
+            case None             => b append sep append '?'
+            case Some(Failure(e)) => b append sep append s"[ex: $e]"
+            case Some(Success(t)) => loop(t, first = false)
+          }
+      }
+    }
+
+    b append start
+    loop(this, first = true)
+    b append end
+    b
+  }
+
+  def mkString(start: String, sep: String, end: String): String =
+    addString(new StringBuilder(), start, sep, end).toString
+}
+
+final case class AsyncCons[A](head: A, tail: Future[AsyncList[A]]) extends AsyncList[A] {
+  override def toString = this.mkString("AsyncList(", ", ", ")")
+}
+
+sealed trait AsyncNil extends AsyncList[Nothing] {
+  override def toString = "AsyncNil"
+}
+
+final case object AsyncNil extends AsyncNil
+
+//////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////
 
 sealed trait FutureList[+A] extends Product with Serializable {
   def headOption(implicit ec: EC): Future[Option[A]] =
@@ -118,6 +173,10 @@ sealed trait FutureNil extends FutureList[Nothing] {
 }
 
 final case object FutureNil extends FutureNil
+
+//////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////
 
 //final case class FutureList[A](value: Future[Page[A]]) {
 //  def head(implicit ec: EC): Future[A] = value map (_.head)
