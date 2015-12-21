@@ -15,15 +15,10 @@ import scala.util.{ Failure, Success }
 // * locally at #4
 // * or remotely at #3
 
-final case class FList[+A](value: Future[Option[(A, Option[FList[A]])]]) {
-  def map[B](f: A => B)(implicit ec: EC): FList[B] = {
-    FList(value map (_ map {
-      case (head, None)       => (f(head), None)
-      case (head, Some(tail)) => (f(head), Some(tail map f))
-    }))
-  }
+final case class FList[+A](value: Future[Option[(A, FList[A])]]) {
+  def map[B](f: A => B)(implicit ec: EC): FList[B] = FList(value map (_ map { case (h, t) => (f(h), t map f) }))
 
-  def flatMap[B](f: A => FList[B])(implicit ec: EC) : FList[B] = map(f).flatten
+  def flatMap[B](f: A => FList[B])(implicit ec: EC): FList[B] = map(f).flatten
 
   /*
   flatten (us1 :: us2 :: FNil) ::
@@ -33,31 +28,21 @@ final case class FList[+A](value: Future[Option[(A, Option[FList[A]])]]) {
        to us1 :: us2 :: uk1 :: uk2 :: au1 :: au2 :: FNil
    */
   def flatten[B](implicit ec: EC, ev: A <:< FList[B]): FList[B] = {
-    def inner(head: B, optTail: Option[FList[B]], finalTail: Option[FList[B]]): Future[Option[(B, Option[FList[B]])]] = {
-      optTail match {
-        case None       => Future successful Some((head, finalTail))
-        case Some(tail) =>
-          tail.value map {
-            case None            => Some((head, finalTail))
-            case Some((h, optT)) => Some((head, Some(FList(inner(h, optT, finalTail)))))
-          }
+    def loop(head: B, tail: FList[B], finalTail: FList[B]): Future[Option[(B, FList[B])]] = {
+      tail.value map {
+        case None         => Some((head, finalTail))
+        case Some((h, t)) => Some((head, FList(loop(h, t, finalTail))))
       }
     }
-    def loop(target: FList[FList[B]]): Future[Option[(B, Option[FList[B]])]] = {
-      target.value flatMap {
-        case None                      => Future successful None
-        case Some((xsHead, xsOptTail)) =>
-          xsHead.value flatMap {
-            case None               =>
-              xsOptTail match {
-                case None         => Future successful None
-                case Some(xsTail) => loop(xsTail)
-              }
-            case Some((head, optTail)) => inner(head, optTail, xsOptTail map (_.flatten))
-          }
+    FList(this.map(ev).value flatMap {
+      case None               => Future successful None
+      case Some((head, tail)) =>
+        head.value flatMap {
+          case None         => tail.flatten.value
+          case Some((h, t)) => loop(h, t, tail.flatten)
+        }
       }
-    }
-    FList(loop(this map ev))
+    )
   }
 
   // Strings
@@ -67,11 +52,10 @@ final case class FList[+A](value: Future[Option[(A, Option[FList[A]])]]) {
   def addString(b: StringBuilder, start: String, sep: String, end: String): StringBuilder = {
     @tailrec def loop(xs: FList[A], first: Boolean): Unit = {
       xs.value.value match {
-        case None                              => if (!first) b append sep; b append '?'
-        case Some(Failure(e))                  => if (!first) b append sep; b append s"[ex: $e]"
-        case Some(Success(None))               =>
-        case Some(Success(Some((h, None))))    => if (!first) b append sep; b append h;
-        case Some(Success(Some((h, Some(t))))) => if (!first) b append sep; b append h; loop(t, first = false)
+        case None                        => if (!first) b append sep; b append '?'
+        case Some(Failure(e))            => if (!first) b append sep; b append s"[ex: $e]"
+        case Some(Success(None))         =>
+        case Some(Success(Some((h, t)))) => if (!first) b append sep; b append h; loop(t, first = false)
       }
     }
 
