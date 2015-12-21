@@ -20,29 +20,24 @@ final case class FList[+A](value: Future[Option[(A, FList[A])]]) {
 
   def flatMap[B](f: A => FList[B])(implicit ec: EC): FList[B] = map(f).flatten
 
-  /*
-  flatten (us1 :: us2 :: FNil) ::
-          (uk1 :: uk2 :: FNil) ::
-          (au1 :: au2 :: FNil) ::
-          FNil
-       to us1 :: us2 :: uk1 :: uk2 :: au1 :: au2 :: FNil
-   */
   def flatten[B](implicit ec: EC, ev: A <:< FList[B]): FList[B] = {
-    def loop(head: B, tail: FList[B], finalTail: FList[B]): Future[Option[(B, FList[B])]] = {
+    FList(this.map(ev).value flatMap {
+      case None         => Future successful None
+      case Some((h, t)) => (h ++ t.flatten).value
+    })
+  }
+
+  def ++[A1 >: A](that: FList[A1])(implicit ec: EC): FList[A1] = {
+    def loop(head: A1, tail: FList[A1], finalTail: FList[A1]): Future[Option[(A1, FList[A1])]] = {
       tail.value map {
         case None         => Some((head, finalTail))
         case Some((h, t)) => Some((head, FList(loop(h, t, finalTail))))
       }
     }
-    FList(this.map(ev).value flatMap {
-      case None               => Future successful None
-      case Some((head, tail)) =>
-        head.value flatMap {
-          case None         => tail.flatten.value
-          case Some((h, t)) => loop(h, t, tail.flatten)
-        }
-      }
-    )
+    FList(value flatMap {
+      case None         => that.value
+      case Some((h, t)) => loop(h, t, that)
+    })
   }
 
   // Strings
