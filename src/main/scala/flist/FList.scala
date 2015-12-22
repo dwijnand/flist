@@ -1,7 +1,7 @@
 package flist
 
 import scala.annotation.tailrec
-import scala.concurrent.{ ExecutionContext => EC }
+import scala.concurrent.{ ExecutionContext => EC, Future }
 import scala.util.{ Failure, Success }
 
 /* A singly linked list of future values of type `A`. Its methods, such as `map` and `flatMap` will ensure that
@@ -49,4 +49,9 @@ final case class FList[+A](value: FutureOption[(A, FList[A])]) {
     addString(new StringBuilder(), start, sep, end).toString
 
   override def toString = this.mkString("FList(", ", ", ")")
+}
+
+object FList {
+  def iterate[A](head: Future[Option[A]])(fetch: A => Future[Option[A]])(implicit ec: EC): FList[A] =
+    FList(FutureOption(head) map (a => (a, iterate(fetch(a))(fetch))))
 }
