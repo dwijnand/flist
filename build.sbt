@@ -1,7 +1,7 @@
-lazy val asyncseq = project in file(".")
+lazy val flist = project in file(".")
 
 organization := "com.dwijnand"
-        name := "asyncseq"
+        name := "flist"
      version := "0.1.0-SNAPSHOT"
 
       scalaVersion := "2.11.7"
@@ -43,7 +43,7 @@ wartremoverWarnings  -= Wart.Serializable
 wartremoverWarnings  -= Wart.Throw
 wartremoverWarnings  -= Wart.Var // temp
 
-initialCommands in console += "\nimport com.dwijnand.asyncseq._"
+initialCommands in console += "\nimport flist._"
 initialCommands in console += "\nimport scala.concurrent._"
 initialCommands in console += "\nimport scala.concurrent.duration._"
 initialCommands in console += "\nimport scala.concurrent.ExecutionContext.Implicits._"
