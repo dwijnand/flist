@@ -6,21 +6,20 @@ import scala.util.{ Failure, Success }
 
 // TODO: AnyVal, toString, final, sealed
 
-final case class FutureOption[+A](value: Future[Option[A]]) {
-  def map[B](f: A => B)(implicit ec: EC): FutureOption[B] = FutureOption(value map (_ map f))
+final case class FutureOption[+A](value: Future[Option[A]]) extends AnyVal {
+  // Functor-based
+  def            map[B](f:        A  =>               B  )(implicit ec: EC): FutureOption[B] = FutureOption(value map (_ map f))
+  def     subflatMap[B](f:        A  =>        Option[B] )(implicit ec: EC): FutureOption[B] = FutureOption(value map (_ flatMap f))
+  def      transform[B](f: Option[A] =>        Option[B] )(implicit ec: EC): FutureOption[B] = FutureOption(value map f)
+  def   subcoflatMap[B](f: Option[A] =>               B  )(implicit ec: EC): FutureOption[B] = FutureOption(value map (o => Some(f(o))))
 
-  def flatMap[B](f: A => FutureOption[B])(implicit ec: EC): FutureOption[B] =
-    FutureOption(
-      value flatMap {
-        case None    => Future successful None
-        case Some(x) => f(x).value
-      }
-    )
+  // Monad-based
+  def        flatMap[B](f:        A  =>  FutureOption[B] )(implicit ec: EC): FutureOption[B] = FutureOption(value flatMap { case None => Future successful None ; case Some(a) => f(a).value })
+  def  flatTransform[B](f: Option[A] =>  FutureOption[B] )(implicit ec: EC): FutureOption[B] = FutureOption(value flatMap (o => f(o).value))
 
-  def transform[B](f: Option[A] => Option[B])(implicit ec: EC): FutureOption[B] = FutureOption(value map f)
-
-  def flatTransform[B](f: Option[A] => FutureOption[B])(implicit ec: EC): FutureOption[B] =
-    FutureOption(value flatMap (o => f(o).value))
+  // Monad-based, accepting the underlying Repr
+  def       flatMapF[B](f:        A  => Future[Option[B]])(implicit ec: EC): FutureOption[B] = FutureOption(value flatMap { case None => Future successful None ; case Some(a) => f(a) })
+  def flatTransformF[B](f: Option[A] => Future[Option[B]])(implicit ec: EC): FutureOption[B] = FutureOption(value flatMap f)
 }
 
 // 1. singly linked list
@@ -41,12 +40,11 @@ final case class FList[+A](value: FutureOption[(A, FList[A])]) {
     FList(this.map(ev).value flatMap { case (h, t) => (h ++ t.flatten).value })
 
   def ++[A1 >: A](that: FList[A1])(implicit ec: EC): FList[A1] = {
-    def loop(head: A1, tail: FList[A1], finalTail: FList[A1]): FutureOption[(A1, FList[A1])] = {
-      tail.value transform {
-        case None         => Some((head, finalTail))
-        case Some((h, t)) => Some((head, FList(loop(h, t, finalTail))))
+    def loop(head: A1, tail: FList[A1], finalTail: FList[A1]): FutureOption[(A1, FList[A1])] =
+      tail.value subcoflatMap {
+        case None         => (head, finalTail)
+        case Some((h, t)) => (head, FList(loop(h, t, finalTail)))
       }
-    }
     FList(
       this.value flatTransform {
         case None         => that.value
