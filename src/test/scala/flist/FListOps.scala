@@ -1,4 +1,4 @@
-package asyncseq
+package flist
 
 import scala.annotation.unchecked.{ uncheckedVariance => uV }
 import scala.collection.generic.{ CanBuildFrom => CBF }
@@ -8,9 +8,11 @@ import scala.concurrent.{ ExecutionContext => EC, Future }
 import scala.reflect.{ ClassTag => CTag }
 import scala.{ PartialFunction => ?=> }
 
-abstract class AsyncSeqOps[+A] {
-  type AsyncSeq[+X] <: AsyncSeqOps[X]
-  type This <: AsyncSeq[A]
+abstract class FListOps[+A] {
+  type FList[+X] <: FListOps[X]
+
+  type This <: FList[A]
+  type MapTo[+X] <: FList[X]
 
   // Foreach
   def foreach[U](f: A => U)(implicit ec: EC): Future[Unit]
@@ -40,7 +42,7 @@ abstract class AsyncSeqOps[+A] {
 
   def lengthCompare(len: Int)(implicit ec: EC): Future[Int]
 
-  def indices(implicit ec: EC): AsyncSeq[Int] // 0 until length
+  def indices(implicit ec: EC): FList[Int] // 0 until length
 
   // Index Search
   def indexOf[A1 >: A](x: A1)                            : Future[Int]
@@ -53,88 +55,88 @@ abstract class AsyncSeqOps[+A] {
   def lastIndexWhere[A1 >: A](x: A1, end: Int)           : Future[Int]
   def segmentLength(p: A => Boolean, from: Int)          : Future[Int]
   def prefixLength(p: A => Boolean)                      : Future[Int]
-  def indexOfSlice[A1 >: A](ys: AsyncSeq[A1])            : Future[Int]
-  def indexOfSlice[A1 >: A](ys: AsyncSeq[A1], from: Int) : Future[Int]
+  def indexOfSlice[A1 >: A](ys: FList[A1])            : Future[Int]
+  def indexOfSlice[A1 >: A](ys: FList[A1], from: Int) : Future[Int]
 
   // Addition
-  def  ++[A1 >: A](that: AsyncSeq[A1])(implicit ec: EC): AsyncSeq[A1]
-  def ++:[A1 >: A](that: AsyncSeq[A1])(implicit ec: EC): AsyncSeq[A1]
+  def  ++[A1 >: A](that: FList[A1])(implicit ec: EC): FList[A1]
+  def ++:[A1 >: A](that: FList[A1])(implicit ec: EC): FList[A1]
 
-  def +:[A1 >: A](x: A1)(implicit ec: EC): AsyncSeq[A1]
-  def :+[A1 >: A](x: A1)(implicit ec: EC): AsyncSeq[A1]
+  def +:[A1 >: A](x: A1)(implicit ec: EC): FList[A1]
+  def :+[A1 >: A](x: A1)(implicit ec: EC): FList[A1]
 
-  def padTo[A1 >: A](len: Int, x: A1)(implicit ec: EC): AsyncSeq[A1]
+  def padTo[A1 >: A](len: Int, x: A1)(implicit ec: EC): FList[A1]
 
   // Updates
-  def patch[A1 >: A](from: Int, patch: AsyncSeq[A1], replaced: Int): AsyncSeq[A1]
-  def updated[A1 >: A](idx: Int, x: A1): AsyncSeq[A1]
+  def patch[A1 >: A](from: Int, patch: FList[A1], replaced: Int): FList[A1]
+  def updated[A1 >: A](idx: Int, x: A1): FList[A1]
 
   // Sorting
-  def sorted[A1 >: A](implicit ord: Ordering[A1])     : AsyncSeq[A]
-  def sortWith(lt: (A, A) => Boolean)                 : AsyncSeq[A]
-  def sortBy[B](f: A => B)(implicit ord: Ordering[B]) : AsyncSeq[A]
+  def sorted[A1 >: A](implicit ord: Ordering[A1])     : FList[A]
+  def sortWith(lt: (A, A) => Boolean)                 : FList[A]
+  def sortBy[B](f: A => B)(implicit ord: Ordering[B]) : FList[A]
 
   // Reversals
-  def reverse: AsyncSeq[A]
+  def reverse: FList[A]
   def reverseIterator: Future[Iterator[A]]
-  def reverseMap[B](f: A => B): AsyncSeq[B]
+  def reverseMap[B](f: A => B): FList[B]
 
   // Multiset Operations
-  def union[A1 >: A](that: AsyncSeq[A1])(implicit ec: EC): AsyncSeq[A1]
+  def union[A1 >: A](that: FList[A1])(implicit ec: EC): FList[A1]
 
-  def intersect[A1 >: A](that: AsyncSeq[A1]): AsyncSeq[A]
-  def diff     [A1 >: A](that: AsyncSeq[A1]): AsyncSeq[A]
-  def distinct                              : AsyncSeq[A]
+  def intersect[A1 >: A](that: FList[A1]): FList[A]
+  def diff     [A1 >: A](that: FList[A1]): FList[A]
+  def distinct                              : FList[A]
 
   // Comparisons
-  def sameElements[A1 >: A](that: AsyncSeq[A1])(implicit ec: EC): Future[Boolean]
+  def sameElements[A1 >: A](that: FList[A1])(implicit ec: EC): Future[Boolean]
 
-  def startsWith[B](that: AsyncSeq[B])                        : Future[Boolean]
-  def startsWith[B](that: AsyncSeq[B], offset: Int)           : Future[Boolean]
-  def endsWith[B](that: AsyncSeq[B])                          : Future[Boolean]
+  def startsWith[B](that: FList[B])                        : Future[Boolean]
+  def startsWith[B](that: FList[B], offset: Int)           : Future[Boolean]
+  def endsWith[B](that: FList[B])                          : Future[Boolean]
   def contains[A1 >: A](x: A1)(implicit ec: EC)               : Future[Boolean]
-  def containsSlice[B](that: AsyncSeq[B])                     : Future[Boolean]
-  def corresponds[B](that: AsyncSeq[B])(p: (A, B) => Boolean) : Future[Boolean]
+  def containsSlice[B](that: FList[B])                     : Future[Boolean]
+  def corresponds[B](that: FList[B])(p: (A, B) => Boolean) : Future[Boolean]
 
   // Maps
-  def map[B](f: A => B)(implicit ec: EC): AsyncSeq[B]
+  def map[B](f: A => B)(implicit ec: EC): FList[B]
 
-  def flatMap[B](f: A => AsyncSeq[B])(implicit ec: EC) : AsyncSeq[B]
-  def collect[B](pf: A ?=> B)                          : AsyncSeq[B]
+  def flatMap[B](f: A => FList[B])(implicit ec: EC) : FList[B]
+  def collect[B](pf: A ?=> B)                          : FList[B]
 
   // Subcollections
-  def tail                         : AsyncSeq[A] // TODO: Option?
-  def init                         : AsyncSeq[A]
-  def slice(from: Int, until: Int) : AsyncSeq[A]
+  def tail                         : FList[A] // TODO: Option?
+  def init                         : FList[A]
+  def slice(from: Int, until: Int) : FList[A]
 
-  def drop(n: Int)(implicit ec: EC): AsyncSeq[A]
+  def drop(n: Int)(implicit ec: EC): FList[A]
 
-  def dropRight(n: Int): AsyncSeq[A]
+  def dropRight(n: Int): FList[A]
 
-  def dropWhile(p: A => Boolean)(implicit ec: EC): AsyncSeq[A]
+  def dropWhile(p: A => Boolean)(implicit ec: EC): FList[A]
 
-  def take(n: Int)                 : AsyncSeq[A]
-  def takeRight(n: Int)            : AsyncSeq[A]
-  def takeWhile(p: A => Boolean)   : AsyncSeq[A]
-  def filter(   p: A => Boolean)   : AsyncSeq[A]
-  def filterNot(p: A => Boolean)   : AsyncSeq[A]
+  def take(n: Int)                 : FList[A]
+  def takeRight(n: Int)            : FList[A]
+  def takeWhile(p: A => Boolean)   : FList[A]
+  def filter(   p: A => Boolean)   : FList[A]
+  def filterNot(p: A => Boolean)   : FList[A]
 
   // Other iterators
-  def grouped(size: Int)(implicit ec: EC): AsyncSeq[AsyncSeq[A]]
+  def grouped(size: Int)(implicit ec: EC): FList[FList[A]]
 
-  def sliding(size: Int)            : AsyncSeq[Vector[A]]
-  def sliding(size: Int, step: Int) : AsyncSeq[Vector[A]]
+  def sliding(size: Int)            : FList[Vector[A]]
+  def sliding(size: Int, step: Int) : FList[Vector[A]]
 
   // Zippers
-  def zip[A1 >: A, B](ys: AsyncSeq[B])                 : AsyncSeq[(A1, B)]
-  def zipAll[B, A1 >: A](ys: AsyncSeq[B], a: A1, b: B) : AsyncSeq[(A1, B)]
-  def zipWithIndex[A1 >: A]                            : AsyncSeq[(A1, Int)]
+  def zip[A1 >: A, B](ys: FList[B])                 : FList[(A1, B)]
+  def zipAll[B, A1 >: A](ys: FList[B], a: A1, b: B) : FList[(A1, B)]
+  def zipWithIndex[A1 >: A]                            : FList[(A1, Int)]
 
   // Subdivisions
-  def splitAt(n: Int)            : (AsyncSeq[A], AsyncSeq[A])
-  def span(p: A => Boolean)      : (AsyncSeq[A], AsyncSeq[A])
-  def partition(p: A => Boolean) : (AsyncSeq[A], AsyncSeq[A])
-  def groupBy[K](f: A => K)      : Future[Map[K, AsyncSeq[A]]]
+  def splitAt(n: Int)            : (FList[A], FList[A])
+  def span(p: A => Boolean)      : (FList[A], FList[A])
+  def partition(p: A => Boolean) : (FList[A], FList[A])
+  def groupBy[K](f: A => K)      : Future[Map[K, FList[A]]]
 
   // Element Conditions
   def forall(p: A => Boolean)(implicit ec: EC): Future[Boolean]
@@ -162,11 +164,11 @@ abstract class AsyncSeqOps[+A] {
   def minBy[B](f: A => B)(implicit ord: Ordering[B], ec: EC): Future[Option[A]]
   def maxBy[B](f: A => B)(implicit ord: Ordering[B], ec: EC): Future[Option[A]]
 
-  def scan[B >: A](z: B)(op: (B, B) => B): AsyncSeq[B]
-  def scanLeft[B]( z: B)(op: (B, A) => B): AsyncSeq[B]
-  def scanRight[B](z: B)(op: (A, B) => B): AsyncSeq[B]
+  def scan[B >: A](z: B)(op: (B, B) => B): FList[B]
+  def scanLeft[B]( z: B)(op: (B, A) => B): FList[B]
+  def scanRight[B](z: B)(op: (A, B) => B): FList[B]
 
-  def flatten[B](implicit ec: EC, ev: A <:< AsyncSeq[B]): AsyncSeq[B]
+  def flatten[B](implicit ec: EC, ev: A <:< FList[B]): FList[B]
 
   // Copying
   def copyToBuffer[B >: A](xs: mutable.Buffer[B])(implicit ec: EC): Future[Unit]

@@ -1,34 +1,11 @@
-package asyncseq
+package flist
 
 import scala.annotation.tailrec
-import scala.concurrent.{ ExecutionContext => EC, Future }
+import scala.concurrent.{ ExecutionContext => EC }
 import scala.util.{ Failure, Success }
 
-final case class FutureOption[+A](value: Future[Option[A]]) extends AnyVal {
-  // Functor-based
-  def            map[B](f:        A  =>               B  )(implicit ec: EC): FutureOption[B] = FutureOption(value map (_ map f))
-  def     subflatMap[B](f:        A  =>        Option[B] )(implicit ec: EC): FutureOption[B] = FutureOption(value map (_ flatMap f))
-  def      transform[B](f: Option[A] =>        Option[B] )(implicit ec: EC): FutureOption[B] = FutureOption(value map f)
-  def   subcoflatMap[B](f: Option[A] =>               B  )(implicit ec: EC): FutureOption[B] = FutureOption(value map (o => Some(f(o))))
-
-  // Monad-based
-  def        flatMap[B](f:        A  =>  FutureOption[B] )(implicit ec: EC): FutureOption[B] = FutureOption(value flatMap { case None => Future successful None ; case Some(a) => f(a).value })
-  def  flatTransform[B](f: Option[A] =>  FutureOption[B] )(implicit ec: EC): FutureOption[B] = FutureOption(value flatMap (o => f(o).value))
-
-  // Monad-based, accepting the underlying Repr
-  def       flatMapF[B](f:        A  => Future[Option[B]])(implicit ec: EC): FutureOption[B] = FutureOption(value flatMap { case None => Future successful None ; case Some(a) => f(a) })
-  def flatTransformF[B](f: Option[A] => Future[Option[B]])(implicit ec: EC): FutureOption[B] = FutureOption(value flatMap f)
-}
-
-// 1. singly linked list
-// 2. value is a future value
-// 3. once computed it could be empty
-// 4. but when present it's: a value and optionally a next page value
-// 5. the next page is the next cell
-// list termination is either:
-// * locally at #4
-// * or remotely at #3
-
+/* A singly linked list of future values of type `A`. Its methods, such as `map` and `flatMap` will ensure that
+ * the computations are executed as soon as possible, asynchronously. */
 final case class FList[+A](value: FutureOption[(A, FList[A])]) {
   def map[B](f: A => B)(implicit ec: EC): FList[B] = FList(this.value map { case (h, t) => (f(h), t map f) })
 
