@@ -6,6 +6,23 @@ import scala.util.{ Failure, Success }
 
 // TODO: AnyVal, toString, final, sealed
 
+final case class FutureOption[+A](value: Future[Option[A]]) {
+  def map[B](f: A => B)(implicit ec: EC): FutureOption[B] = FutureOption(value map (_ map f))
+
+  def flatMap[B](f: A => FutureOption[B])(implicit ec: EC): FutureOption[B] =
+    FutureOption(
+      value flatMap {
+        case None    => Future successful None
+        case Some(x) => f(x).value
+      }
+    )
+
+  def transform[B](f: Option[A] => Option[B])(implicit ec: EC): FutureOption[B] = FutureOption(value map f)
+
+  def flatTransform[B](f: Option[A] => FutureOption[B])(implicit ec: EC): FutureOption[B] =
+    FutureOption(value flatMap (o => f(o).value))
+}
+
 // 1. singly linked list
 // 2. value is a future value
 // 3. once computed it could be empty
@@ -15,35 +32,33 @@ import scala.util.{ Failure, Success }
 // * locally at #4
 // * or remotely at #3
 
-final case class FList[+A](value: Future[Option[(A, FList[A])]]) {
-  def map[B](f: A => B)(implicit ec: EC): FList[B] = FList(value map (_ map { case (h, t) => (f(h), t map f) }))
+final case class FList[+A](value: FutureOption[(A, FList[A])]) {
+  def map[B](f: A => B)(implicit ec: EC): FList[B] = FList(this.value map { case (h, t) => (f(h), t map f) })
 
-  def flatMap[B](f: A => FList[B])(implicit ec: EC): FList[B] = map(f).flatten
+  def flatMap[B](f: A => FList[B])(implicit ec: EC): FList[B] = this.map(f).flatten
 
-  def flatten[B](implicit ec: EC, ev: A <:< FList[B]): FList[B] = {
-    FList(this.map(ev).value flatMap {
-      case None         => Future successful None
-      case Some((h, t)) => (h ++ t.flatten).value
-    })
-  }
+  def flatten[B](implicit ec: EC, ev: A <:< FList[B]): FList[B] =
+    FList(this.map(ev).value flatMap { case (h, t) => (h ++ t.flatten).value })
 
   def ++[A1 >: A](that: FList[A1])(implicit ec: EC): FList[A1] = {
-    def loop(head: A1, tail: FList[A1], finalTail: FList[A1]): Future[Option[(A1, FList[A1])]] = {
-      tail.value map {
+    def loop(head: A1, tail: FList[A1], finalTail: FList[A1]): FutureOption[(A1, FList[A1])] = {
+      tail.value transform {
         case None         => Some((head, finalTail))
         case Some((h, t)) => Some((head, FList(loop(h, t, finalTail))))
       }
     }
-    FList(value flatMap {
-      case None         => that.value
-      case Some((h, t)) => loop(h, t, that)
-    })
+    FList(
+      this.value flatTransform {
+        case None         => that.value
+        case Some((h, t)) => loop(h, t, that)
+      }
+    )
   }
 
   // Strings
   def addString(b: StringBuilder, start: String, sep: String, end: String): StringBuilder = {
     @tailrec def loop(xs: FList[A], first: Boolean): Unit = {
-      xs.value.value match {
+      xs.value.value.value match {
         case None                        => if (!first) b append sep; b append '?'
         case Some(Failure(e))            => if (!first) b append sep; b append s"[ex: $e]"
         case Some(Success(None))         =>
