@@ -11,9 +11,6 @@ import scala.{ PartialFunction => ?=> }
 abstract class FListOps[+A] {
   type FList[+X] <: FListOps[X]
 
-  type This <: FList[A]
-  type MapTo[+X] <: FList[X]
-
   // Foreach
   def foreach[U](f: A => U)(implicit ec: EC): Future[Unit]
 
@@ -45,16 +42,16 @@ abstract class FListOps[+A] {
   def indices(implicit ec: EC): FList[Int] // 0 until length
 
   // Index Search
-  def indexOf[A1 >: A](x: A1)                            : Future[Int]
-  def indexOf[A1 >: A](x: A1, from: Int)                 : Future[Int]
-  def lastIndexOf[A1 >: A](x: A1)                        : Future[Int]
-  def lastIndexOf[A1 >: A](x: A1, end: Int)              : Future[Int]
-  def indexWhere(p: A => Boolean, from: Int)             : Future[Int]
-  def indexWhere(p: A => Boolean)                        : Future[Int]
-  def lastIndexWhere[A1 >: A](x: A1)                     : Future[Int]
-  def lastIndexWhere[A1 >: A](x: A1, end: Int)           : Future[Int]
-  def segmentLength(p: A => Boolean, from: Int)          : Future[Int]
-  def prefixLength(p: A => Boolean)                      : Future[Int]
+  def indexOf[A1 >: A](x: A1)                         : Future[Int]
+  def indexOf[A1 >: A](x: A1, from: Int)              : Future[Int]
+  def lastIndexOf[A1 >: A](x: A1)                     : Future[Int]
+  def lastIndexOf[A1 >: A](x: A1, end: Int)           : Future[Int]
+  def indexWhere(p: A => Boolean, from: Int)          : Future[Int]
+  def indexWhere(p: A => Boolean)                     : Future[Int]
+  def lastIndexWhere[A1 >: A](x: A1)                  : Future[Int]
+  def lastIndexWhere[A1 >: A](x: A1, end: Int)        : Future[Int]
+  def segmentLength(p: A => Boolean, from: Int)       : Future[Int]
+  def prefixLength(p: A => Boolean)                   : Future[Int]
   def indexOfSlice[A1 >: A](ys: FList[A1])            : Future[Int]
   def indexOfSlice[A1 >: A](ys: FList[A1], from: Int) : Future[Int]
 
@@ -84,9 +81,9 @@ abstract class FListOps[+A] {
   // Multiset Operations
   def union[A1 >: A](that: FList[A1])(implicit ec: EC): FList[A1]
 
-  def intersect[A1 >: A](that: FList[A1]): FList[A]
-  def diff     [A1 >: A](that: FList[A1]): FList[A]
-  def distinct                              : FList[A]
+  def intersect[A1 >: A](that: FList[A1]) : FList[A]
+  def diff     [A1 >: A](that: FList[A1]) : FList[A]
+  def distinct                            : FList[A]
 
   // Comparisons
   def sameElements[A1 >: A](that: FList[A1])(implicit ec: EC): Future[Boolean]
@@ -94,7 +91,7 @@ abstract class FListOps[+A] {
   def startsWith[B](that: FList[B])                        : Future[Boolean]
   def startsWith[B](that: FList[B], offset: Int)           : Future[Boolean]
   def endsWith[B](that: FList[B])                          : Future[Boolean]
-  def contains[A1 >: A](x: A1)(implicit ec: EC)               : Future[Boolean]
+  def contains[A1 >: A](x: A1)(implicit ec: EC)            : Future[Boolean]
   def containsSlice[B](that: FList[B])                     : Future[Boolean]
   def corresponds[B](that: FList[B])(p: (A, B) => Boolean) : Future[Boolean]
 
@@ -102,7 +99,7 @@ abstract class FListOps[+A] {
   def map[B](f: A => B)(implicit ec: EC): FList[B]
 
   def flatMap[B](f: A => FList[B])(implicit ec: EC) : FList[B]
-  def collect[B](pf: A ?=> B)                          : FList[B]
+  def collect[B](pf: A ?=> B)                       : FList[B]
 
   // Subcollections
   def tail                         : FList[A] // TODO: Option?
@@ -115,11 +112,11 @@ abstract class FListOps[+A] {
 
   def dropWhile(p: A => Boolean)(implicit ec: EC): FList[A]
 
-  def take(n: Int)                 : FList[A]
-  def takeRight(n: Int)            : FList[A]
-  def takeWhile(p: A => Boolean)   : FList[A]
-  def filter(   p: A => Boolean)   : FList[A]
-  def filterNot(p: A => Boolean)   : FList[A]
+  def take(n: Int)               : FList[A]
+  def takeRight(n: Int)          : FList[A]
+  def takeWhile(p: A => Boolean) : FList[A]
+  def filter(   p: A => Boolean) : FList[A]
+  def filterNot(p: A => Boolean) : FList[A]
 
   // Other iterators
   def grouped(size: Int)(implicit ec: EC): FList[FList[A]]
@@ -130,7 +127,7 @@ abstract class FListOps[+A] {
   // Zippers
   def zip[A1 >: A, B](ys: FList[B])                 : FList[(A1, B)]
   def zipAll[B, A1 >: A](ys: FList[B], a: A1, b: B) : FList[(A1, B)]
-  def zipWithIndex[A1 >: A]                            : FList[(A1, Int)]
+  def zipWithIndex[A1 >: A]                         : FList[(A1, Int)]
 
   // Subdivisions
   def splitAt(n: Int)            : (FList[A], FList[A])
