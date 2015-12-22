@@ -43,10 +43,7 @@ wartremoverWarnings  -= Wart.Serializable
 wartremoverWarnings  -= Wart.Throw
 wartremoverWarnings  -= Wart.Var // temp
 
-initialCommands in console += "\nimport flist._"
-initialCommands in console += "\nimport scala.concurrent._"
-initialCommands in console += "\nimport scala.concurrent.duration._"
-initialCommands in console += "\nimport scala.concurrent.ExecutionContext.Implicits._"
+initialCommands in console += "\n" + IO.read((resourceDirectory in Compile).value / "initialCommands.scala")
 
 parallelExecution in Test := true
 fork in Test := false
