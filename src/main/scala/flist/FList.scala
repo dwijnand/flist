@@ -6,6 +6,7 @@ import scala.collection.generic.{ CanBuildFrom => CBF }
 import scala.collection.mutable
 import scala.concurrent.{ ExecutionContext => EC, Future }
 import scala.util.{ Failure, Success }
+import FList.{ single, empty }
 
 /* A singly linked list of future values of type `A`. Its methods, such as `map` and `flatMap` will ensure that
  * the computations are executed as soon as possible, asynchronously. */
@@ -31,8 +32,7 @@ final case class FList[+A](value: FutureOption[(A, FList[A])]) {
   def ::[A1 >: A](x: A1): FList[A1] = FList(FutureOption(Future successful Some((x, this))))
   def +:[A1 >: A](x: A1): FList[A1] = FList(FutureOption(Future successful Some((x, this))))
 
-  def :+[A1 >: A](x: A1)(implicit ec: EC): FList[A1] =
-    this ++ FList(FutureOption(Future successful Some((x, FList(FutureOption(Future successful None))))))
+  def :+[A1 >: A](x: A1)(implicit ec: EC): FList[A1] = this ++ single(x)
 
   // Maps
   def map[B](f: A => B)(implicit ec: EC): FList[B] = FList(this.value map { case (h, t) => (f(h), t map f) })
@@ -85,6 +85,12 @@ final case class FList[+A](value: FutureOption[(A, FList[A])]) {
 }
 
 object FList {
+  def apply[A](xs: A*): FList[A] = xs.foldRight(empty[A])(_ :: _)
+
+  def empty[A]: FList[A] = FList(FutureOption(Future successful None))
+
+  def single[A](x: A): FList[A] = x :: empty
+
   def iterate[A](head: Future[Option[A]])(fetch: A => Future[Option[A]])(implicit ec: EC): FList[A] =
     FList(FutureOption(head) map (a => (a, iterate(fetch(a))(fetch))))
 }
