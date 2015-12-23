@@ -22,6 +22,15 @@ final case class FList[+A](value: FutureOption[(A, FList[A])]) {
     )
   }
 
+  def ++:[A1 >: A](that: FList[A1])(implicit ec: EC): FList[A1] = that ++ this
+  def :::[A1 >: A](that: FList[A1])(implicit ec: EC): FList[A1] = that ++ this
+
+  def ::[A1 >: A](x: A1)(implicit ec: EC): FList[A1] = FList(FutureOption(Future successful Some((x, this))))
+  def +:[A1 >: A](x: A1)(implicit ec: EC): FList[A1] = FList(FutureOption(Future successful Some((x, this))))
+
+  def :+[A1 >: A](x: A1)(implicit ec: EC): FList[A1] =
+    this ++ FList(FutureOption(Future successful Some((x, FList(FutureOption(Future successful None))))))
+
   // Maps
   def map[B](f: A => B)(implicit ec: EC): FList[B] = FList(this.value map { case (h, t) => (f(h), t map f) })
 
