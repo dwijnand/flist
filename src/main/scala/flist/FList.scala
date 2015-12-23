@@ -7,13 +7,7 @@ import scala.util.{ Failure, Success }
 /* A singly linked list of future values of type `A`. Its methods, such as `map` and `flatMap` will ensure that
  * the computations are executed as soon as possible, asynchronously. */
 final case class FList[+A](value: FutureOption[(A, FList[A])]) {
-  def map[B](f: A => B)(implicit ec: EC): FList[B] = FList(this.value map { case (h, t) => (f(h), t map f) })
-
-  def flatMap[B](f: A => FList[B])(implicit ec: EC): FList[B] = this.map(f).flatten
-
-  def flatten[B](implicit ec: EC, ev: A <:< FList[B]): FList[B] =
-    FList(this.map(ev).value flatMap { case (h, t) => (h ++ t.flatten).value })
-
+  // Addition
   def ++[A1 >: A](that: FList[A1])(implicit ec: EC): FList[A1] = {
     def loop(head: A1, tail: FList[A1], finalTail: FList[A1]): FutureOption[(A1, FList[A1])] =
       tail.value subcoflatMap {
@@ -27,6 +21,15 @@ final case class FList[+A](value: FutureOption[(A, FList[A])]) {
       }
     )
   }
+
+  // Maps
+  def map[B](f: A => B)(implicit ec: EC): FList[B] = FList(this.value map { case (h, t) => (f(h), t map f) })
+
+  def flatMap[B](f: A => FList[B])(implicit ec: EC): FList[B] = this.map(f).flatten
+
+  // Specific Folds
+  def flatten[B](implicit ec: EC, ev: A <:< FList[B]): FList[B] =
+    FList(this.map(ev).value flatMap { case (h, t) => (h ++ t.flatten).value })
 
   // Strings
   def addString(b: StringBuilder, start: String, sep: String, end: String): StringBuilder = {
