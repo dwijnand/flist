@@ -17,3 +17,9 @@ final case class FutureOption[+A](value: Future[Option[A]]) extends AnyVal {
   def       flatMapF[B](f:        A  => Future[Option[B]])(implicit ec: EC): FutureOption[B] = FutureOption(value flatMap { case None => Future successful None ; case Some(a) => f(a) })
   def flatTransformF[B](f: Option[A] => Future[Option[B]])(implicit ec: EC): FutureOption[B] = FutureOption(value flatMap f)
 }
+
+object FutureOption {
+  def empty[A]             : FutureOption[A] = FutureOption(Future successful None)
+  def of[A](x: A)          : FutureOption[A] = FutureOption(Future successful Some(x))
+  def opt[A](x: Option[A]) : FutureOption[A] = FutureOption(Future successful x)
+}
