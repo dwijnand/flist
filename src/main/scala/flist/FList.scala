@@ -1,27 +1,28 @@
 package flist
 
+import flist.FList.{ empty, single }
+
 import scala.annotation.tailrec
 import scala.annotation.unchecked.{ uncheckedVariance => uV }
 import scala.collection.generic.{ CanBuildFrom => CBF }
 import scala.collection.mutable
 import scala.concurrent.{ ExecutionContext => EC, Future }
 import scala.util.{ Failure, Success }
-import FList.{ single, empty }
 
 /* A singly linked list of future values of type `A`. Its methods, such as `map` and `flatMap` will ensure that
  * the computations are executed as soon as possible, asynchronously. */
 final case class FList[+A](value: FutureOption[(A, FList[A])]) {
   // Addition
   def ++[A1 >: A](that: FList[A1])(implicit ec: EC): FList[A1] = {
-    def loop(head: A1, tail: FList[A1], finalTail: FList[A1]): FutureOption[(A1, FList[A1])] =
-      tail.value subcoflatMap {
-        case None         => (head, finalTail)
-        case Some((h, t)) => (head, FList(loop(h, t, finalTail)))
+    def loop(h0: A1, tail0: FList[A1], that: FList[A1]): FutureOption[(A1, FList[A1])] =
+      tail0.value subcoflatMap {
+        case None            => (h0, that)
+        case Some((h, tail)) => (h0, FList(loop(h, tail, that)))
       }
     FList(
       this.value flatTransform {
-        case None         => that.value
-        case Some((h, t)) => loop(h, t, that)
+        case None            => that.value
+        case Some((h, tail)) => loop(h, tail, that)
       }
     )
   }
