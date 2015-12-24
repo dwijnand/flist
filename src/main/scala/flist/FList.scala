@@ -40,6 +40,12 @@ final case class FList[+A](value: FutureOption[(A, FList[A])]) {
 
   def flatMap[B](f: A => FList[B])(implicit ec: EC): FList[B] = this.map(f).flatten
 
+  // Subcollections
+  def tail(implicit ec: EC): Future[Option[FList[A]]] = this.value map (_._2) value
+
+  def drop(n: Int)(implicit ec: EC): FList[A] =
+    if (n > 0) FList(this.value flatMap (_._2.value)) drop (n - 1) else this
+
   // Folds
   def foldLeft[B](z: B)(op: (B, A) => B)(implicit ec: EC): Future[B] =
     this.value.value.flatMap {

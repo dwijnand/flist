@@ -102,8 +102,8 @@ abstract class FListOps[+A] {
   def collect[B](pf: A ?=> B)                       : FList[B]
 
   // Subcollections
-  def tail                         : FList[A] // TODO: Option?
-  def init                         : FList[A]
+  def tail                         : Future[Option[FList[A]]]
+  def init                         : Future[Option[FList[A]]]
   def slice(from: Int, until: Int) : FList[A]
 
   def drop(n: Int)(implicit ec: EC): FList[A]
