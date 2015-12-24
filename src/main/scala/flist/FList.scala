@@ -46,6 +46,29 @@ final case class FList[+A](value: FutureOption[(A, FList[A])]) {
   def drop(n: Int)(implicit ec: EC): FList[A] =
     if (n > 0) FList(this.value flatMap (_._2.value)) drop (n - 1) else this
 
+  // Other iterators
+  def grouped(size: Int)(implicit ec: EC): FList[FList[A]] = {
+    require(size > 0, "size must be positive")
+    def loop(xs: FList[A], n: Int): Future[(FList[A], FList[A])] = {
+      if (n > 0)
+        xs.value.value flatMap {
+          case None            => Future successful ((empty, empty))
+          case Some((h, tail)) => loop(tail, n - 1) map { case (tail2, leftover) => (h :: tail2, leftover) }
+        }
+      else
+        Future successful ((empty, xs))
+    }
+    def outerLoop(xs: FList[A]): Future[FList[FList[A]]] = {
+      loop(xs, size) flatMap { case (inner, leftover) =>
+        leftover.value.value.flatMap {
+          case None => Future successful (inner :: empty)
+          case _    => outerLoop(leftover) map (inner :: _)
+        }
+      }
+    }
+    FList(FutureOption(outerLoop(this) flatMap (_.value.value)))
+  }
+
   // Folds
   def foldLeft[B](z: B)(op: (B, A) => B)(implicit ec: EC): Future[B] =
     this.value.value.flatMap {
