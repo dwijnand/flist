@@ -89,7 +89,7 @@ final case class FList[+A](value: FutureOption[(A, FList[A])]) {
         }
       }
     }
-    FList(FutureOption(outerLoop(this) flatMap (_.value.value)))
+    FList fromFuture outerLoop(this)
   }
 
   // Folds
@@ -147,4 +147,7 @@ object FList {
 
   def iterate[A](head: Future[Option[A]])(fetch: A => Future[Option[A]])(implicit ec: EC): FList[A] =
     FList(FutureOption(head) map (a => (a, iterate(fetch(a))(fetch))))
+
+  def fromFuture[A](f: Future[FList[A]])(implicit ec: EC): FList[A] =
+    FList(FutureOption(f flatMap (_.value.value)))
 }
