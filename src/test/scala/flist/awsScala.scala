@@ -1,7 +1,5 @@
 package flist
 
-import com.dwijnand.asyncseq.AsyncSeq
-
 import scala.concurrent.duration._
 import scala.concurrent.{ ExecutionContext => EC, Future }
 
@@ -52,21 +50,21 @@ final class AwsClient2(awsEndpoint: FakeAwsEndpoint) {
   def getAsgsPage(req: AsgReq = AsgReq())(implicit ec: EC): Future[AsgRsp] = awsEndpoint describeAsgs req
   def getLcsPage( req: LcReq  = LcReq()) (implicit ec: EC): Future[LcRsp]  = awsEndpoint describeLcs req
 
-  def getAsgs(req: AsgReq = AsgReq())(implicit ec: EC): AsyncSeq[Asg] =
-    AsyncSeq
+  def getAsgs(req: AsgReq = AsgReq())(implicit ec: EC): FList[Asg] =
+    FList
       .unpaginate(getAsgsPage(req))(asgRsp => asgRsp.nextToken map (t => getAsgsPage(req.copy(token = Some(t)))))
-      .flatMap(asgRsp => AsyncSeq fromSeq asgRsp.asgs)
+      .flatMap(asgRsp => FList fromSeq asgRsp.asgs)
 
-  def getLcs(req: LcReq = LcReq())(implicit ec: EC): AsyncSeq[Lc] =
-    AsyncSeq
+  def getLcs(req: LcReq = LcReq())(implicit ec: EC): FList[Lc] =
+    FList
       .unpaginate(getLcsPage(req))(lcRsp => lcRsp.nextToken map (t => getLcsPage(req.copy(token = Some(t)))))
-      .flatMap(lcRsp => AsyncSeq fromSeq lcRsp.lcs)
+      .flatMap(lcRsp => FList fromSeq lcRsp.lcs)
 
-  def getLcsForAsgs(asgs: AsyncSeq[Asg])(implicit ec: EC): AsyncSeq[(Asg, Lc)] = {
+  def getLcsForAsgs(asgs: FList[Asg])(implicit ec: EC): FList[(Asg, Lc)] = {
     asgs
       .grouped(50)
       .flatMap { asgs =>
-        AsyncSeq fromFuture asgs.toVector.flatMap { asgs =>
+        FList fromFuture asgs.toVector.flatMap { asgs =>
           getLcs(LcReq(asgs map (_.lcName))).map(lc => lc.name -> lc).toMap map { lcMap =>
             asgs flatMap { asg =>
               lcMap get asg.lcName match {
@@ -74,7 +72,7 @@ final class AwsClient2(awsEndpoint: FakeAwsEndpoint) {
                 case None     => println(s"Dropping asg with no lc: $asg"); Nil
               }
             }
-          } map AsyncSeq.fromSeq
+          } map FList.fromSeq
         }
       }
   }
