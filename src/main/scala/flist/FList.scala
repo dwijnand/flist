@@ -83,9 +83,9 @@ final case class FList[+A](value: FutureOption[(A, FList[A])]) {
     }
     def outerLoop(xs: FList[A]): Future[FList[FList[A]]] = {
       loop(xs, size) flatMap { case (inner, leftover) =>
-        leftover.value.value.flatMap {
-          case None => Future successful (inner :: empty)
-          case _    => outerLoop(leftover) map (inner :: _)
+        leftover.isEmpty flatMap {
+          case true  => Future successful (inner :: empty)
+          case false => outerLoop(leftover) map (inner :: _)
         }
       }
     }
