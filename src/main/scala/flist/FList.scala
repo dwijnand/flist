@@ -148,6 +148,18 @@ object FList {
   def iterate[A](head: Future[Option[A]])(fetch: A => Future[Option[A]])(implicit ec: EC): FList[A] =
     FList(FutureOption(head) map (a => (a, iterate(fetch(a))(fetch))))
 
+  def unpaginate[A](head: Future[A])(fetch: A => Option[Future[A]])(implicit ec: EC): FList[A] = {
+    def loop(head: Future[Option[A]]): FList[A] = {
+      def fetch2(a: A): Future[Option[A]] =
+        fetch(a) match {
+          case None    => Future successful None
+          case Some(x) => x map (Some(_))
+        }
+      FList(FutureOption(head) map (a => (a, loop(fetch2(a)))))
+    }
+    loop(head map (Some(_)))
+  }
+
   def fromFuture[A](f: Future[FList[A]])(implicit ec: EC): FList[A] =
     FList(FutureOption(f flatMap (_.value.value)))
 }
