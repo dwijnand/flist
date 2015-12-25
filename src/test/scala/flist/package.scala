@@ -1,10 +1,10 @@
-package com.dwijnand
+package flist
 
-import scala.concurrent.{ Await, Future }
 import scala.concurrent.duration._
+import scala.concurrent.{ Await, Future }
 import java.util.concurrent.TimeUnit
 
-package object asyncseq {
+object `package` {
   implicit final class DurationW(private val d: Duration) extends AnyVal {
     def toHHmmssSSS = {
       import TimeUnit._

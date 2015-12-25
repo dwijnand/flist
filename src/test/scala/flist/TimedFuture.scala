@@ -1,7 +1,7 @@
-package com.dwijnand.asyncseq
+package flist
 
 import scala.concurrent.duration._
-import scala.concurrent.{ Promise, ExecutionContext, Future }
+import scala.concurrent.{ ExecutionContext, Future, Promise }
 import scala.util.Success
 
 object TimedFuture {
