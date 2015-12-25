@@ -12,6 +12,29 @@ import scala.util.{ Failure, Success }
 /* A singly linked list of future values of type `A`. Its methods, such as `map` and `flatMap` will ensure that
  * the computations are executed as soon as possible, asynchronously. */
 final case class FList[+A](value: FutureOption[(A, FList[A])]) {
+  // Foreach
+  def foreach[U](f: A => U)(implicit ec: EC): Future[Unit] =
+    this.value.value flatMap {
+      case None            => Future.successful(())
+      case Some((h, tail)) => f(h); tail foreach f
+    }
+
+  // Size info
+  def isTraversableAgain: Boolean = true
+
+  @tailrec def hasDefiniteSize: Boolean =
+    this.value.value.value match {
+      case Some(Success(Some((h, tail)))) => tail.hasDefiniteSize
+      case Some(Success(None))            => true
+      case Some(Failure(_))               => true
+      case None                           => false
+    }
+
+  def isEmpty (implicit ec: EC): Future[Boolean] = this.value.value map (_.isDefined)
+  def nonEmpty(implicit ec: EC): Future[Boolean] = this.value.value map (_.isEmpty)
+  def size    (implicit ec: EC): Future[Int] = this.foldLeft(0)((c, _) => c + 1)
+  def length  (implicit ec: EC): Future[Int] = this.foldLeft(0)((c, _) => c + 1)
+
   // Addition
   def ++[A1 >: A](that: FList[A1])(implicit ec: EC): FList[A1] = {
     def loop(h0: A1, tail0: FList[A1], that: FList[A1]): FutureOption[(A1, FList[A1])] =
