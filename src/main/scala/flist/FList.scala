@@ -138,11 +138,12 @@ final case class FList[+A](value: FutureOption[(A, FList[A])]) {
 }
 
 object FList {
-  def apply[A](xs: A*): FList[A] = xs.foldRight(empty[A])(_ :: _)
-
   def empty[A]: FList[A] = FList(FutureOption(Future successful None))
 
   def single[A](x: A): FList[A] = x :: empty
+
+  def apply[A](xs: A*): FList[A]       = xs.foldRight(empty[A])(_ :: _)
+  def fromSeq[A](xs: Seq[A]): FList[A] = xs.foldRight(empty[A])(_ :: _)
 
   def iterate[A](head: Future[Option[A]])(fetch: A => Future[Option[A]])(implicit ec: EC): FList[A] =
     FList(FutureOption(head) map (a => (a, iterate(fetch(a))(fetch))))
