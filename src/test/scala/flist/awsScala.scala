@@ -1,6 +1,5 @@
 package flist
 
-import scala.concurrent.duration._
 import scala.concurrent.{ ExecutionContext => EC, Future }
 
 final class AwsClient1(awsEndpoint: FakeAwsEndpoint) {
@@ -75,30 +74,5 @@ final class AwsClient2(awsEndpoint: FakeAwsEndpoint) {
           } map FList.fromSeq
         }
       }
-  }
-}
-
-object Main {
-  def main(args: Array[String]): Unit = {
-    import scala.concurrent.ExecutionContext.Implicits._
-
-    val awsClient1 = new AwsClient1(new FakeAwsEndpoint(1))
-    val awsClient2 = new AwsClient2(new FakeAwsEndpoint(1))
-
-    checkAndLog(TimedFuture(awsClient1.getAsgs() flatMap awsClient1.getLcsForAsgs).await30s)
-    checkAndLog(TimedFuture(awsClient2.getLcsForAsgs(awsClient2.getAsgs()).toVector).await30s)
-  }
-
-  def checkAndLog(t: (Vector[(Asg, Lc)], Duration)): Unit = {
-    val (asgsAndLcs, timed) = t
-    println(s"timed: ${timed.toHHmmssSSS}")
-
-    val expectedAsgs = AwsTestUtils makeAsgs (1 to 450)
-    val expectedLcs  = AwsTestUtils makeLcs  (1 to 450)
-
-    if (asgsAndLcs != (expectedAsgs zip expectedLcs)) {
-      println(s"asgs and lcs expected don't match actual:")
-      asgsAndLcs foreach { case (asg, lc) => println(s"asg: $asg  lc: $lc") }
-    }
   }
 }
