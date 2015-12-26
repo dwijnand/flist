@@ -64,7 +64,7 @@ final case class FList[+A](value: FutureOption[(A, FList[A])]) {
   def flatMap[B](f: A => FList[B])(implicit ec: EC): FList[B] = this.map(f).flatten
 
   // Subcollections
-  def tail(implicit ec: EC): Future[Option[FList[A]]] = this.value map (_._2) value
+  def tail(implicit ec: EC): Future[Option[FList[A]]] = this.value.map(_._2).value
 
   def drop(n: Int)(implicit ec: EC): FList[A] =
     if (n > 0) FList(this.value flatMap (_._2.value)) drop (n - 1) else this
@@ -149,14 +149,8 @@ object FList {
     FList(FutureOption(head) map (a => (a, iterate(fetch(a))(fetch))))
 
   def unpaginate[A](head: Future[A])(fetch: A => Option[Future[A]])(implicit ec: EC): FList[A] = {
-    def loop(head: Future[Option[A]]): FList[A] = {
-      def fetch2(a: A): Future[Option[A]] =
-        fetch(a) match {
-          case None    => Future successful None
-          case Some(x) => x map (Some(_))
-        }
-      FList(FutureOption(head) map (a => (a, loop(fetch2(a)))))
-    }
+    def loop(head: Future[Option[A]]): FList[A] = FList(FutureOption(head) map (a => (a, loop(fetch2(a)))))
+    def fetch2(a: A) = fetch(a).fold(Future successful Option.empty[A])(_ map (Some(_)))
     loop(head map (Some(_)))
   }
 
