@@ -31,7 +31,7 @@ final case class FList[+A](value: FutureOption[(A, FList[A])]) {
     }
 
   def isEmpty (implicit ec: EC): Future[Boolean] = this.value.value map (_.isEmpty)
-  def nonEmpty(implicit ec: EC): Future[Boolean] = this.value.value map (_.isDefined)
+  def nonEmpty(implicit ec: EC): Future[Boolean] = this.value.value map (_.nonEmpty)
   def size    (implicit ec: EC): Future[Int] = this.foldLeft(0)((c, _) => c + 1)
   def length  (implicit ec: EC): Future[Int] = this.foldLeft(0)((c, _) => c + 1)
 
