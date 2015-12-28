@@ -19,6 +19,7 @@ object `package` {
     }
   }
   implicit final class FutureWithAwait30s[A](private val fut: Future[A]) extends AnyVal {
-    def await30s = Await.result(fut, 30.seconds)
+    def await(d: Duration) = Await.result(fut, d)
+    def await30s           = fut await 30.seconds
   }
 }

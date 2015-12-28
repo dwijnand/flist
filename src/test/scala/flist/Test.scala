@@ -2,8 +2,8 @@ package flist
 
 import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext.Implicits._
+import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.concurrent.{ Await, Future }
 import scala.io.AnsiColor._
 
 object Test {
@@ -33,7 +33,7 @@ object Test {
   }
 
   @tailrec def inspectPayload[A](p: FList[A]): Unit = {
-    Await.result(p.value.value, 2.seconds) match {
+    p.value.value await 2.seconds match {
       case Some((a, tail)) =>
         println(s"$isoTime $YELLOW[4]$RESET saw $a")
         Thread sleep inspectSleep
