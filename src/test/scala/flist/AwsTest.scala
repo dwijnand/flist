@@ -5,15 +5,34 @@ import scala.concurrent.{ ExecutionContext => EC, Future, Promise }
 import scala.util.Success
 
 object AwsTest {
+  val awsEndpointSleep = 20L
+
   def main(args: Array[String]): Unit = {
     import scala.concurrent.ExecutionContext.Implicits._
 
-    val awsEndpoint: FakeAwsEndpoint = new FakeAwsEndpoint(1)
+    val awsEndpoint = new FakeAwsEndpoint(awsEndpointSleep)
     val awsClient1 = new AwsClient1(awsEndpoint)
     val awsClient2 = new AwsClient2(awsEndpoint)
 
-    checkAndLog("v1", timedFuture(awsClient1.getAsgs() flatMap awsClient1.getLcsForAsgs).await30s)
-    checkAndLog("v2", timedFuture(awsClient2.getLcsForAsgs(awsClient2.getAsgs()).toVector).await30s)
+    checkAndLog("v1", timedFuture(v1(awsClient1)).await30s)
+    checkAndLog("v2", timedFuture(v2(awsClient2)).await30s)
+  }
+
+  def v1(awsClient1: AwsClient1)(implicit ec: EC): Future[Vector[(Asg, Lc)]] = {
+    val asgs       : Future[Vector[Asg]]       = awsClient1.getAsgs()
+    val asgsAndLcs : Future[Vector[(Asg, Lc)]] =
+      asgs flatMap { (asgs: Vector[Asg]) =>
+        val asgsAndLcs: Future[Vector[(Asg, Lc)]] = awsClient1 getLcsForAsgs asgs
+        asgsAndLcs
+      }
+    asgsAndLcs
+  }
+
+  def v2(awsClient2: AwsClient2)(implicit ec: EC): Future[Vector[(Asg, Lc)]] = {
+    val asgs        : FList[Asg]                = awsClient2.getAsgs()
+    val asgsAndLcs  : FList[(Asg, Lc)]          = awsClient2 getLcsForAsgs asgs
+    val asgsAndLcsF : Future[Vector[(Asg, Lc)]] = asgsAndLcs.toVector
+    asgsAndLcsF
   }
 
   def checkAndLog(name: String, t: (Vector[(Asg, Lc)], Duration)): Unit = {
