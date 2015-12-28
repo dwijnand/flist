@@ -18,14 +18,11 @@ object AwsTest {
     val log1 = Log(s"${RED}v1$RESET")
     val log2 = Log(s"${GREEN}v2$RESET")
 
-    val asgs1: Future[Vector[Asg]] = awsClient1.getAsgs()
-    val asgs2: FList[Asg] = awsClient2.getAsgs()
+    val asgsAndLcs1: Future[Vector[(Asg, Lc)]] = v1(awsClient1)
+    val asgsAndLcs2: FList[(Asg, Lc)] = v2Pre(awsClient2)
 
-    asgs1 foreach (_ foreach log1.println)
-    asgs2 foreach log2.println
-
-//    val vv1: Future[Vector[(Asg, Lc)]] = v1(awsClient1)
-//    val vv2: Future[Vector[(Asg, Lc)]] = v2(awsClient2)
+    asgsAndLcs1 foreach (_ foreach log1.println)
+    asgsAndLcs2 foreach log2.println
 
 //    checkAndLog("v1", timedFuture(v1(awsClient1)).await30s)
 //    checkAndLog("v2", timedFuture(v2(awsClient2)).await30s)
@@ -41,11 +38,15 @@ object AwsTest {
     asgsAndLcs
   }
 
+  def v2Pre(awsClient2: AwsClient2)(implicit ec: EC): FList[(Asg, Lc)] = {
+    val asgs        : FList[Asg]       = awsClient2.getAsgs()
+    val asgsAndLcs  : FList[(Asg, Lc)] = awsClient2 getLcsForAsgs asgs
+    asgsAndLcs
+  }
+
   def v2(awsClient2: AwsClient2)(implicit ec: EC): Future[Vector[(Asg, Lc)]] = {
-    val asgs        : FList[Asg]                = awsClient2.getAsgs()
-    val asgsAndLcs  : FList[(Asg, Lc)]          = awsClient2 getLcsForAsgs asgs
-    val asgsAndLcsF : Future[Vector[(Asg, Lc)]] = asgsAndLcs.toVector
-    asgsAndLcsF
+    val asgsAndLcs: Future[Vector[(Asg, Lc)]] = v2Pre(awsClient2).toVector
+    asgsAndLcs
   }
 
   def checkAndLog(name: String, t: (Vector[(Asg, Lc)], Duration)): Unit = {
