@@ -63,7 +63,7 @@ final class AwsClient2(awsEndpoint: FakeAwsEndpoint) {
     asgs
       .grouped(50)
       .flatMap { asgs =>
-        FList fromFuture asgs.toVector.flatMap { asgs =>
+        FList fromFutureSeq asgs.toVector.flatMap { asgs =>
           getLcs(LcReq(asgs map (_.lcName))).map(lc => lc.name -> lc).toMap map { lcMap =>
             asgs flatMap { asg =>
               lcMap get asg.lcName match {
@@ -71,7 +71,7 @@ final class AwsClient2(awsEndpoint: FakeAwsEndpoint) {
                 case None     => println(s"Dropping asg with no lc: $asg"); Nil
               }
             }
-          } map FList.fromSeq
+          }
         }
       }
   }

@@ -156,4 +156,6 @@ object FList {
 
   def fromFuture[A](f: Future[FList[A]])(implicit ec: EC): FList[A] =
     FList(FutureOption(f flatMap (_.value.value)))
+
+  def fromFutureSeq[A](f: Future[Seq[A]])(implicit ec: EC): FList[A] = fromFuture(f map fromSeq)
 }
