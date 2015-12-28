@@ -73,6 +73,7 @@ final case class FList[+A](value: FutureOption[(A, FList[A])]) {
     if (n > 0) FList(this.value flatMap (_._2.value)) drop (n - 1) else this
 
   // Other iterators
+  // FIXME: Every element of the returned FList completes at the same time, which defealts the purpose..
   def grouped(size: Int)(implicit ec: EC): FList[FList[A]] = {
     require(size > 0, "size must be positive")
     def loop(xs: FList[A], n: Int): Future[(FList[A], FList[A])] = {

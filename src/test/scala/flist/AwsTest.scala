@@ -16,14 +16,14 @@ object AwsTest {
     val log1 = Log(s"${RED}v1$RESET")
     val log2 = Log(s"${GREEN}v2$RESET")
 
-    val awsClient1 = new AwsClient1(awsEndpoint)
-    val awsClient2 = new AwsClient2(awsEndpoint)
+    val awsClient1 = new AwsClient1(awsEndpoint, log1)
+    val awsClient2 = new AwsClient2(awsEndpoint, log2)
 
     val asgsAndLcs1: Future[Vector[(Asg, Lc)]] = v1(awsClient1)
     val asgsAndLcs2: FList[(Asg, Lc)] = v2Pre(awsClient2)
 
-    asgsAndLcs1 foreach (_ foreach log1.println)
-    asgsAndLcs2 foreach log2.println
+    asgsAndLcs1.await30s
+    asgsAndLcs2.toVector.await30s
 
 //    checkAndLog("v1", timedFuture(v1(awsClient1)).await30s)
 //    checkAndLog("v2", timedFuture(v2(awsClient2)).await30s)

@@ -2,7 +2,7 @@ package flist
 
 import scala.concurrent.{ ExecutionContext => EC, Future }
 
-final class AwsClient1(awsEndpoint: FakeAwsEndpoint) {
+final class AwsClient1(awsEndpoint: FakeAwsEndpoint, log: Log) {
   def getAsgsPage(req: AsgReq = AsgReq())(implicit ec: EC): Future[AsgRsp] = awsEndpoint describeAsgs req
   def getLcsPage( req: LcReq  = LcReq()) (implicit ec: EC): Future[LcRsp]  = awsEndpoint describeLcs req
 
@@ -31,6 +31,7 @@ final class AwsClient1(awsEndpoint: FakeAwsEndpoint) {
   def getLcsForAsgs(asgs: Vector[Asg])(implicit ec: EC): Future[Vector[(Asg, Lc)]] =
     Future
       .traverse(asgs grouped 50) { asgs =>
+        log println s"Seeing asg group starting with ${asgs.head}"
         getLcs(LcReq(asgs map (_.lcName)))
           .map(_.map(lc => lc.name -> lc).toMap)
           .map { lcsMap =>
@@ -45,7 +46,7 @@ final class AwsClient1(awsEndpoint: FakeAwsEndpoint) {
       .map(_.flatten.toVector)
 }
 
-final class AwsClient2(awsEndpoint: FakeAwsEndpoint) {
+final class AwsClient2(awsEndpoint: FakeAwsEndpoint, log: Log) {
   def getAsgsPage(req: AsgReq = AsgReq())(implicit ec: EC): Future[AsgRsp] = awsEndpoint describeAsgs req
   def getLcsPage( req: LcReq  = LcReq()) (implicit ec: EC): Future[LcRsp]  = awsEndpoint describeLcs req
 
@@ -59,11 +60,12 @@ final class AwsClient2(awsEndpoint: FakeAwsEndpoint) {
       .unpaginate(getLcsPage(req))(lcRsp => lcRsp.nextToken map (t => getLcsPage(req.copy(token = Some(t)))))
       .flatMap(lcRsp => FList fromSeq lcRsp.lcs)
 
-  def getLcsForAsgs(asgs: FList[Asg])(implicit ec: EC): FList[(Asg, Lc)] = {
+  def getLcsForAsgs(asgs: FList[Asg])(implicit ec: EC): FList[(Asg, Lc)] =
     asgs
       .grouped(50)
       .flatMap { asgs =>
         FList fromFutureSeq asgs.toVector.flatMap { asgs =>
+          log println s"Seeing asg group starting with ${asgs.head}"
           getLcs(LcReq(asgs map (_.lcName))).map(lc => lc.name -> lc).toMap map { lcMap =>
             asgs flatMap { asg =>
               lcMap get asg.lcName match {
@@ -74,5 +76,4 @@ final class AwsClient2(awsEndpoint: FakeAwsEndpoint) {
           }
         }
       }
-  }
 }
