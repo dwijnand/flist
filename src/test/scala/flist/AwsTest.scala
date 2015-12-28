@@ -3,9 +3,10 @@ package flist
 import scala.concurrent.duration._
 import scala.concurrent.{ ExecutionContext => EC, Future, Promise }
 import scala.util.Success
+import scala.io.AnsiColor._
 
 object AwsTest {
-  val awsEndpointSleep = 20L
+  val awsEndpointSleep = 200L
 
   def main(args: Array[String]): Unit = {
     import scala.concurrent.ExecutionContext.Implicits._
@@ -14,8 +15,20 @@ object AwsTest {
     val awsClient1 = new AwsClient1(awsEndpoint)
     val awsClient2 = new AwsClient2(awsEndpoint)
 
-    checkAndLog("v1", timedFuture(v1(awsClient1)).await30s)
-    checkAndLog("v2", timedFuture(v2(awsClient2)).await30s)
+    val log1 = Log(s"${RED}v1$RESET")
+    val log2 = Log(s"${GREEN}v2$RESET")
+
+    val asgs1: Future[Vector[Asg]] = awsClient1.getAsgs()
+    val asgs2: FList[Asg] = awsClient2.getAsgs()
+
+    asgs1 foreach (_ foreach log1.println)
+    asgs2 foreach log2.println
+
+//    val vv1: Future[Vector[(Asg, Lc)]] = v1(awsClient1)
+//    val vv2: Future[Vector[(Asg, Lc)]] = v2(awsClient2)
+
+//    checkAndLog("v1", timedFuture(v1(awsClient1)).await30s)
+//    checkAndLog("v2", timedFuture(v2(awsClient2)).await30s)
   }
 
   def v1(awsClient1: AwsClient1)(implicit ec: EC): Future[Vector[(Asg, Lc)]] = {
