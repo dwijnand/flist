@@ -35,6 +35,9 @@ final case class FList[+A](value: FutureOption[(A, FList[A])]) {
   def size    (implicit ec: EC): Future[Int] = this.foldLeft(0)((c, _) => c + 1)
   def length  (implicit ec: EC): Future[Int] = this.foldLeft(0)((c, _) => c + 1)
 
+  // Element Retrieval
+  def head(implicit ec: EC): Future[Option[A]] = value.map(_._1).value
+
   // Addition
   def ++[A1 >: A](that: FList[A1])(implicit ec: EC): FList[A1] = {
     def loop(h0: A1, tail0: FList[A1], that: FList[A1]): FutureOption[(A1, FList[A1])] =

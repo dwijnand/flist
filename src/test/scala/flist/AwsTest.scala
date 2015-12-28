@@ -12,11 +12,12 @@ object AwsTest {
     import scala.concurrent.ExecutionContext.Implicits._
 
     val awsEndpoint = new FakeAwsEndpoint(awsEndpointSleep)
-    val awsClient1 = new AwsClient1(awsEndpoint)
-    val awsClient2 = new AwsClient2(awsEndpoint)
 
     val log1 = Log(s"${RED}v1$RESET")
     val log2 = Log(s"${GREEN}v2$RESET")
+
+    val awsClient1 = new AwsClient1(awsEndpoint)
+    val awsClient2 = new AwsClient2(awsEndpoint)
 
     val asgsAndLcs1: Future[Vector[(Asg, Lc)]] = v1(awsClient1)
     val asgsAndLcs2: FList[(Asg, Lc)] = v2Pre(awsClient2)
@@ -26,6 +27,7 @@ object AwsTest {
 
 //    checkAndLog("v1", timedFuture(v1(awsClient1)).await30s)
 //    checkAndLog("v2", timedFuture(v2(awsClient2)).await30s)
+    ()
   }
 
   def v1(awsClient1: AwsClient1)(implicit ec: EC): Future[Vector[(Asg, Lc)]] = {
@@ -39,8 +41,8 @@ object AwsTest {
   }
 
   def v2Pre(awsClient2: AwsClient2)(implicit ec: EC): FList[(Asg, Lc)] = {
-    val asgs        : FList[Asg]       = awsClient2.getAsgs()
-    val asgsAndLcs  : FList[(Asg, Lc)] = awsClient2 getLcsForAsgs asgs
+    val asgs       : FList[Asg]       = awsClient2.getAsgs()
+    val asgsAndLcs : FList[(Asg, Lc)] = awsClient2 getLcsForAsgs asgs
     asgsAndLcs
   }
 
