@@ -2,6 +2,7 @@ package flist
 
 import scala.concurrent.duration._
 import scala.concurrent.{ Await, Future }
+import scala.util.{ Success, Failure }
 import java.util.concurrent.TimeUnit
 
 object `package` {
@@ -22,5 +23,12 @@ object `package` {
   implicit final class FutureWithAwait30s[A](private val fut: Future[A]) extends AnyVal {
     def await(d: Duration) = Await.result(fut, d)
     def await30s           = fut await 30.seconds
+
+    def to_s(show: A => String): String =
+      fut.value match {
+        case None             => "Future(?)"
+        case Some(Failure(e)) => s"Future(ex: $e)"
+        case Some(Success(x)) => s"Future(${show(x)})"
+      }
   }
 }
