@@ -1,4 +1,4 @@
-lazy val flist = project in file(".")
+val flist = project in file(".")
 
 organization := "com.dwijnand"
         name := "flist"
@@ -7,7 +7,7 @@ organization := "com.dwijnand"
       scalaVersion := "2.11.7"
 crossScalaVersions := Seq(scalaVersion.value)
 
-maxErrors := 5
+       maxErrors := 5
 triggeredMessage := Watched.clearWhenTriggered
 
 scalacOptions ++= Seq("-encoding", "utf8")
@@ -18,7 +18,7 @@ scalacOptions  += "-language:postfixOps"
 scalacOptions  += "-Xfuture"
 scalacOptions  += "-Yinline-warnings"
 scalacOptions  += "-Yno-adapted-args"
-scalacOptions  += "-Ywarn-dead-code"
+scalacOptions  += "-Ywarn-dead-code" // WARN: Too many ???s cause false positives!
 scalacOptions  += "-Ywarn-numeric-widen"
 scalacOptions  += "-Ywarn-unused-import"
 //scalacOptions  += "-Ywarn-value-discard"
@@ -49,7 +49,11 @@ parallelExecution in Test := true
 fork in Test := false
 
 fork in run := true
+connectInput in run := true
 cancelable in Global := true
+
+sources in (Compile, doc) := Nil
+publishArtifact in (Compile, packageDoc) := false
 
 watchSources ++= (baseDirectory.value * "*.sbt").get
 watchSources ++= (baseDirectory.value / "project" * "*.scala").get
